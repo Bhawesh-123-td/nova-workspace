@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Nova Workspace">
+  <defs>
+    <linearGradient id="nova-bg" x1="64" y1="40" x2="456" y2="480" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#090e1b"/>
+      <stop offset="0.56" stop-color="#0f2d37"/>
+      <stop offset="1" stop-color="#1f6f68"/>
+    </linearGradient>
+    <radialGradient id="nova-glow" cx="392" cy="112" r="210" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#24d3c2" stop-opacity="0.72"/>
+      <stop offset="1" stop-color="#24d3c2" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="nova-mark" x1="144" y1="132" x2="366" y2="392" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fbfff7"/>
+      <stop offset="1" stop-color="#7ef7d9"/>
+    </linearGradient>
+    <linearGradient id="nova-star" x1="360" y1="62" x2="438" y2="172" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#ffda74"/>
+    </linearGradient>
+  </defs>
+  <rect x="20" y="20" width="472" height="472" rx="116" fill="url(#nova-bg)"/>
+  <rect x="20" y="20" width="472" height="472" rx="116" fill="url(#nova-glow)"/>
+  <path fill="#000000" opacity="0.22" d="M146 380V168c0-17 13-30 30-30h12c12 0 23 6 30 16l94 144V148c0-17 13-30 30-30h12c17 0 30 13 30 30v222c0 17-13 30-30 30h-12c-11 0-22-6-28-15L218 237v133c0 17-13 30-30 30h-12c-17 0-30-13-30-30Z"/>
+  <path fill="url(#nova-mark)" d="M138 370V158c0-17 13-30 30-30h12c12 0 23 6 30 16l94 144V138c0-17 13-30 30-30h12c17 0 30 13 30 30v222c0 17-13 30-30 30h-12c-11 0-22-6-28-15L210 227v133c0 17-13 30-30 30h-12c-17 0-30-13-30-30Z"/>
+  <path fill="#000000" opacity="0.2" d="m398 68 17 40 43 4-33 28 10 42-37-23-37 23 10-42-33-28 43-4 17-40Z"/>
+  <path fill="url(#nova-star)" d="m398 60 17 40 43 4-33 28 10 42-37-23-37 23 10-42-33-28 43-4 17-40Z"/>
+  <rect x="108" y="397" width="180" height="17" rx="8" fill="#fbfff7" opacity="0.2"/>
+  <rect x="108" y="428" width="112" height="14" rx="7" fill="#24d3c2" opacity="0.32"/>
+</svg>

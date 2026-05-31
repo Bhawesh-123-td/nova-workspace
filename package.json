@@ -1,0 +1,81 @@
+{
+  "name": "nova-workspace",
+  "version": "1.0.0",
+  "description": "Nova Workspace is a desktop workspace for notes, projects, tasks, tables, and AI-assisted planning.",
+  "author": "Cris",
+  "private": true,
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5173",
+    "serve:keepalive": "node scripts/keep-server-up.mjs",
+    "serve:background": "powershell -ExecutionPolicy Bypass -File scripts/start-server.ps1",
+    "app:open": "powershell -ExecutionPolicy Bypass -File scripts/open-app.ps1",
+    "icons": "node scripts/generate-icons.mjs",
+    "prebuild": "npm run icons",
+    "build": "vite build",
+    "desktop": "npm run build && electron electron/main.cjs",
+    "desktop:dev": "node scripts/desktop-dev.mjs",
+    "desktop:pack": "npm run build && electron-builder --dir",
+    "desktop:dist": "npm run build && electron-builder",
+    "mac:dist": "npm run build && electron-builder --mac",
+    "win:dist": "npm run build && node scripts/build-windows-exe.mjs",
+    "portable": "npm run build && powershell -ExecutionPolicy Bypass -File scripts/create-portable-package.ps1",
+    "preview": "vite preview --host 127.0.0.1"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^5.0.4",
+    "vite": "^7.1.12",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "lucide-react": "^0.468.0"
+  },
+  "devDependencies": {
+    "electron": "^41.5.0",
+    "electron-builder": "^26.8.1"
+  },
+  "build": {
+    "appId": "com.cris.novaworkspace",
+    "productName": "Nova Workspace",
+    "copyright": "Made by Cris",
+    "toolsets": {
+      "winCodeSign": "1.1.0"
+    },
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": false,
+      "signExts": [
+        "!.exe"
+      ],
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Office"
+    },
+    "nsis": {
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
+    }
+  }
+}
