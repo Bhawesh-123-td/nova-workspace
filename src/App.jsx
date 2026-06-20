@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive,
+  Bell,
   BookOpen,
   CalendarDays,
   CheckSquare,
@@ -22,6 +23,7 @@ import {
   Heading2,
   Home,
   LayoutGrid,
+  Link2,
   ListChecks,
   Maximize2,
   MessageSquareText,
@@ -49,6 +51,10 @@ const STORAGE_KEY = 'nova-workspace-pages-v1';
 const LEGACY_STORAGE_KEYS = ['codex-notion-inspired-workspace-v1'];
 const THEME_STORAGE_KEY = 'nova-workspace-theme';
 const LEGACY_THEME_STORAGE_KEYS = ['codex-nova-workspace-theme'];
+const THEME_PLANE_POLISH_KEY = 'nova-workspace-plane-theme-v1';
+const LAYOUT_STORAGE_KEY = 'nova-workspace-layout';
+const LEGACY_LAYOUT_STORAGE_KEYS = ['codex-nova-workspace-layout'];
+const LAYOUT_POLISH_KEY = 'nova-workspace-layout-polished-v1';
 
 const themes = [
   { id: 'light', label: 'Light', icon: Sun, swatches: ['#f7f8f6', '#2f6f68', '#f1e5c8'] },
@@ -75,7 +81,65 @@ const themes = [
   { id: 'canvas', label: 'Canvas', icon: Sun, background: true, swatches: ['#f9faf4', '#2f7a67', '#d95d68'] },
   { id: 'terminal', label: 'Terminal', icon: Moon, background: true, swatches: ['#08110d', '#4ade80', '#f8d66d'] },
   { id: 'prism', label: 'Prism', icon: Palette, background: true, swatches: ['#f8fbff', '#0ea5e9', '#e879f9'] },
+  { id: 'plane', label: 'Plane', icon: Moon, background: true, swatches: ['#0f0f10', '#7c6bff', '#38c5c5'] },
 ];
+
+const layoutOptions = [
+  { id: 'classic', code: 'A', label: 'Classic Sidebar', description: 'Left nav, editor, right properties', icon: FileText },
+  { id: 'dashboard', code: 'B', label: 'Dashboard Hub', description: 'Cards, templates, AI and tasks', icon: LayoutGrid },
+  { id: 'focus', code: 'C', label: 'Focus Writer', description: 'Centered page with minimal chrome', icon: Maximize2 },
+  { id: 'three', code: 'D', label: 'Three Panel', description: 'Navigation, editor, inspector balanced', icon: Rows3 },
+  { id: 'command', code: 'E', label: 'Command Center', description: 'Templates and quick actions up front', icon: Command },
+  { id: 'board', code: 'F', label: 'Board Workspace', description: 'Wide board/table planning surface', icon: Table2 },
+  { id: 'split', code: 'G', label: 'Split Notes', description: 'Editor plus comparison lane', icon: PanelLeftOpen },
+  { id: 'minimal', code: 'H', label: 'Minimal Clean', description: 'Sparse top nav and document space', icon: Circle },
+];
+
+const layoutAliases = {
+  balanced: 'classic',
+  compact: 'focus',
+};
+
+function normalizeLayoutValue(value) {
+  const resolved = layoutAliases[value] || value;
+  return layoutOptions.some((item) => item.id === resolved) ? resolved : 'classic';
+}
+
+function readInitialLayout() {
+  const storedLayout = readStoredValue(LAYOUT_STORAGE_KEY, LEGACY_LAYOUT_STORAGE_KEYS);
+  const normalizedLayout = normalizeLayoutValue(storedLayout || 'classic');
+
+  try {
+    const alreadyPolished = localStorage.getItem(LAYOUT_POLISH_KEY);
+    if (!alreadyPolished) {
+      localStorage.setItem(LAYOUT_POLISH_KEY, '1');
+      if (!storedLayout || ['balanced', 'compact', 'command'].includes(storedLayout)) {
+        localStorage.setItem(LAYOUT_STORAGE_KEY, 'classic');
+        return 'classic';
+      }
+    }
+  } catch {
+    return normalizedLayout;
+  }
+
+  return normalizedLayout;
+}
+
+function readInitialTheme() {
+  const storedTheme = readStoredValue(THEME_STORAGE_KEY, LEGACY_THEME_STORAGE_KEYS);
+
+  try {
+    if (!localStorage.getItem(THEME_PLANE_POLISH_KEY)) {
+      localStorage.setItem(THEME_PLANE_POLISH_KEY, '1');
+      localStorage.setItem(THEME_STORAGE_KEY, 'plane');
+      return 'plane';
+    }
+  } catch {
+    return storedTheme || 'plane';
+  }
+
+  return storedTheme || 'plane';
+}
 
 const commandGroups = [
   {
@@ -96,6 +160,7 @@ const commandGroups = [
       { type: 'date', label: 'Date', hint: 'Add a dated note marker', icon: CalendarDays },
       { type: 'code', label: 'Code', hint: 'Keep a command or snippet readable', icon: Code2 },
       { type: 'table', label: 'Table', hint: 'Make a lightweight database', icon: Table2 },
+      { type: 'canvas', label: 'Canvas', hint: 'Map ideas spatially with sticky cards', icon: LayoutGrid },
       { type: 'divider', label: 'Divider', hint: 'Separate ideas visually', icon: Rows3 },
     ],
   },
@@ -103,6 +168,7 @@ const commandGroups = [
 
 const allCommands = commandGroups.flatMap((group) => group.items);
 const priorityOptions = ['Low', 'Normal', 'High', 'Urgent'];
+const sectionOptions = ['Private', 'Teamspace', 'Journal', 'Planning', 'Learning', 'Content', 'Clients', 'Archive', 'Shared'];
 const assistantModes = [
   { id: 'coach', label: 'Coach', icon: Star },
   { id: 'writer', label: 'Writer', icon: Quote },
@@ -114,6 +180,17 @@ const assistantPowerTools = [
   { id: 'launch', label: 'Launch plan', hint: 'Milestones and acceptance checks', icon: Flag },
   { id: 'writerpack', label: 'Writer pack', hint: 'TLDR, hook, headline, and close', icon: Quote },
   { id: 'cleanup', label: 'Cleanup pass', hint: 'Tidy stale tasks and weak structure', icon: CheckSquare },
+];
+const templateLibrary = [
+  { kind: 'notes', label: 'Quick notes', description: 'Clean capture page with actions', icon: BookOpen, meta: 'Notes' },
+  { kind: 'project', label: 'Project brief', description: 'Overview, milestones, owners', icon: LayoutGrid, meta: 'Project' },
+  { kind: 'daily', label: 'Daily note', description: 'Today plan, wins, follow-ups', icon: CalendarDays, meta: 'Journal' },
+  { kind: 'meeting', label: 'Meeting notes', description: 'Agenda, decisions, action items', icon: MessageSquareText, meta: 'Meeting' },
+  { kind: 'tasks', label: 'Task board', description: 'Prioritized task tracker table', icon: ListChecks, meta: 'Tasks' },
+  { kind: 'weekly', label: 'Weekly plan', description: 'Goals, schedule, review points', icon: Clock3, meta: 'Plan' },
+  { kind: 'study', label: 'Study notes', description: 'Concepts, questions, flash cards', icon: BookOpen, meta: 'Learn' },
+  { kind: 'content', label: 'Content calendar', description: 'Ideas, drafts, publishing dates', icon: CalendarDays, meta: 'Content' },
+  { kind: 'client', label: 'Client CRM', description: 'Contacts, status, next follow-up', icon: Table2, meta: 'CRM' },
 ];
 
 function createId(prefix = 'id') {
@@ -221,18 +298,40 @@ function createParagraph(text = '') {
   return { id: createId('block'), type: 'paragraph', text };
 }
 
+function createTableBlock(columns = ['Task', 'Status', 'Owner'], rows = []) {
+  return {
+    id: createId('block'),
+    type: 'table',
+    columns,
+    rows: rows.length
+      ? rows
+      : [
+          ['Draft outline', 'In progress', 'You'],
+          ['Review notes', 'Next', 'Team'],
+          ['Publish', 'Later', ''],
+        ],
+  };
+}
+
+function createCanvasBlock() {
+  return {
+    id: createId('block'),
+    type: 'canvas',
+    cards: [
+      { id: createId('card'), title: 'Idea', body: 'Drop the rough thought here.', tone: 'violet' },
+      { id: createId('card'), title: 'Signal', body: 'What matters or changed?', tone: 'teal' },
+      { id: createId('card'), title: 'Next', body: 'One action worth taking.', tone: 'amber' },
+    ],
+  };
+}
+
 function createBlock(type = 'paragraph', text = '') {
   if (type === 'table') {
-    return {
-      id: createId('block'),
-      type,
-      columns: ['Task', 'Status', 'Owner'],
-      rows: [
-        ['Draft outline', 'In progress', 'You'],
-        ['Review notes', 'Next', 'Team'],
-        ['Publish', 'Later', ''],
-      ],
-    };
+    return createTableBlock();
+  }
+
+  if (type === 'canvas') {
+    return createCanvasBlock();
   }
 
   if (type === 'divider') {
@@ -255,16 +354,31 @@ function createBlock(type = 'paragraph', text = '') {
 }
 
 function cloneBlock(block) {
+  const annotations = (block.annotations ?? []).map((annotation) => ({
+    ...annotation,
+    id: createId('annotation'),
+  }));
+
   if (block.type === 'table') {
     return {
       ...block,
       id: createId('block'),
-      columns: [...block.columns],
-      rows: block.rows.map((row) => [...row]),
+      annotations,
+      columns: Array.isArray(block.columns) && block.columns.length ? block.columns.map(String) : ['Task', 'Status', 'Owner'],
+      rows: Array.isArray(block.rows) ? block.rows.map((row) => Array.isArray(row) ? row.map(String) : []) : [],
     };
   }
 
-  return { ...block, id: createId('block') };
+  if (block.type === 'canvas') {
+    return {
+      ...block,
+      id: createId('block'),
+      annotations,
+      cards: (block.cards ?? []).map((card) => ({ ...card, id: createId('card') })),
+    };
+  }
+
+  return { ...block, id: createId('block'), annotations };
 }
 
 function createPage({
@@ -278,6 +392,7 @@ function createPage({
   priority = 'Normal',
   noteDate = todayDateValue(),
   dueDate = '',
+  relations = [],
 }) {
   return {
     id: createId('page'),
@@ -290,6 +405,7 @@ function createPage({
     priority,
     noteDate,
     dueDate,
+    relations,
     createdAt: nowStamp(),
     updatedAt: nowStamp(),
     blocks: blocks?.length ? blocks : [createParagraph('')],
@@ -353,7 +469,220 @@ function starterPages() {
   ];
 }
 
+function makeModernTemplate(kind) {
+  const dateValue = todayDateValue();
+
+  const templates = {
+    blank: () => createPage({
+      title: 'Untitled',
+      status: 'Draft',
+      tags: [],
+      icon: 'N',
+      blocks: [createParagraph('')],
+    }),
+    notes: () => createPage({
+      title: 'Untitled notes',
+      status: 'Draft',
+      tags: ['notes'],
+      priority: 'Normal',
+      icon: 'NT',
+      blocks: [
+        createBlock('heading1', 'Notes'),
+        createBlock('date', 'What happened today?'),
+        createBlock('paragraph', ''),
+        createBlock('heading2', 'Action items'),
+        createBlock('todo', ''),
+      ],
+    }),
+    project: () => createPage({
+      title: 'Project brief',
+      icon: 'PRJ',
+      section: 'Teamspace',
+      status: 'In progress',
+      tags: ['project', 'planning'],
+      priority: 'High',
+      blocks: [
+        createBlock('heading1', 'Project overview'),
+        createBlock('paragraph', 'Goal: what are we building, why now, and what will be true when this is done?'),
+        createBlock('heading2', 'Success criteria'),
+        createBlock('todo', 'Define the outcome'),
+        createBlock('todo', 'Confirm owners and timeline'),
+        createTableBlock(
+          ['Milestone', 'Owner', 'Status'],
+          [
+            ['Scope', 'You', 'Next'],
+            ['Prototype', '', 'Planned'],
+            ['Review', '', 'Later'],
+          ],
+        ),
+        createBlock('callout', 'Use the Nova AI mission tool when you want a tighter launch plan.'),
+      ],
+    }),
+    daily: () => createPage({
+      title: `Daily note - ${formatDueDate(dateValue)}`,
+      icon: 'DAY',
+      section: 'Journal',
+      status: 'Active',
+      tags: ['daily', 'today'],
+      priority: 'Normal',
+      noteDate: dateValue,
+      blocks: [
+        createBlock('heading1', formatFullDate(dateValue)),
+        createBlock('date', 'Wins, notes, and useful context.'),
+        createBlock('heading2', 'Plan'),
+        createBlock('todo', 'Choose the most important task'),
+        createBlock('todo', 'Capture follow-ups before the end of the day'),
+        createBlock('heading2', 'Notes'),
+        createBlock('paragraph', ''),
+      ],
+    }),
+    meeting: () => createPage({
+      title: 'Meeting notes',
+      icon: 'MTG',
+      section: 'Teamspace',
+      status: 'Review',
+      tags: ['meeting', 'decisions'],
+      priority: 'Normal',
+      blocks: [
+        createBlock('heading1', 'Meeting notes'),
+        createBlock('date', 'Meeting date and context'),
+        createBlock('heading2', 'Agenda'),
+        createBlock('todo', 'Review progress'),
+        createBlock('todo', 'Agree on next steps'),
+        createBlock('heading2', 'Decisions'),
+        createTableBlock(
+          ['Decision', 'Owner', 'Follow-up'],
+          [
+            ['Decision to capture', 'Owner', 'Next action'],
+            ['', '', ''],
+          ],
+        ),
+        createBlock('heading2', 'Action items'),
+        createBlock('todo', ''),
+      ],
+    }),
+    tasks: () => createPage({
+      title: 'Task board',
+      icon: 'TODO',
+      section: 'Planning',
+      status: 'Active',
+      tags: ['tasks', 'tracker'],
+      priority: 'High',
+      blocks: [
+        createBlock('heading1', 'Task board'),
+        createBlock('callout', 'Keep this page as the command center for work that needs movement.'),
+        createTableBlock(
+          ['Task', 'Priority', 'Status', 'Due'],
+          [
+            ['Top priority', 'High', 'Now', formatDueDate(dateValue)],
+            ['Next action', 'Normal', 'Next', ''],
+            ['Later idea', 'Low', 'Later', ''],
+          ],
+        ),
+        createBlock('heading2', 'Quick tasks'),
+        createBlock('todo', 'Add one task worth doing today'),
+      ],
+    }),
+    weekly: () => createPage({
+      title: 'Weekly plan',
+      icon: 'WK',
+      section: 'Planning',
+      status: 'Active',
+      tags: ['weekly', 'planning'],
+      priority: 'High',
+      blocks: [
+        createBlock('heading1', 'Weekly plan'),
+        createBlock('heading2', 'Main goals'),
+        createBlock('todo', 'Pick the top outcome for the week'),
+        createBlock('todo', 'Schedule deep work'),
+        createTableBlock(
+          ['Day', 'Focus', 'Must finish'],
+          [
+            ['Monday', '', ''],
+            ['Tuesday', '', ''],
+            ['Wednesday', '', ''],
+            ['Thursday', '', ''],
+            ['Friday', '', ''],
+          ],
+        ),
+        createBlock('heading2', 'Review'),
+        createBlock('paragraph', 'What worked, what slipped, and what changes next week?'),
+      ],
+    }),
+    study: () => createPage({
+      title: 'Study notes',
+      icon: 'STDY',
+      section: 'Learning',
+      status: 'Draft',
+      tags: ['study', 'learning'],
+      priority: 'Normal',
+      blocks: [
+        createBlock('heading1', 'Study notes'),
+        createBlock('paragraph', 'Topic, source, and why this matters.'),
+        createBlock('heading2', 'Core concepts'),
+        createBlock('todo', 'Explain the idea in your own words'),
+        createTableBlock(
+          ['Question', 'Answer', 'Confidence'],
+          [
+            ['What is the main idea?', '', 'Low'],
+            ['Where would I use this?', '', 'Medium'],
+            ['What still feels confusing?', '', ''],
+          ],
+        ),
+      ],
+    }),
+    content: () => createPage({
+      title: 'Content calendar',
+      icon: 'POST',
+      section: 'Content',
+      status: 'Active',
+      tags: ['content', 'calendar'],
+      priority: 'Normal',
+      blocks: [
+        createBlock('heading1', 'Content calendar'),
+        createBlock('paragraph', 'Plan ideas, drafts, publishing dates, and promotion steps in one place.'),
+        createTableBlock(
+          ['Idea', 'Channel', 'Status', 'Publish date'],
+          [
+            ['Launch story', 'Blog', 'Draft', ''],
+            ['Feature teaser', 'Social', 'Idea', ''],
+            ['Customer note', 'Email', 'Next', ''],
+          ],
+        ),
+        createBlock('heading2', 'Reusable hooks'),
+        createBlock('quote', 'Start with the problem, then show the useful change.'),
+      ],
+    }),
+    client: () => createPage({
+      title: 'Client CRM',
+      icon: 'CRM',
+      section: 'Clients',
+      status: 'Active',
+      tags: ['client', 'crm'],
+      priority: 'Normal',
+      blocks: [
+        createBlock('heading1', 'Client CRM'),
+        createBlock('paragraph', 'Track relationships, last touch, next follow-up, and current status.'),
+        createTableBlock(
+          ['Name', 'Status', 'Last touch', 'Next step'],
+          [
+            ['Client name', 'Lead', formatDueDate(dateValue), 'Send follow-up'],
+            ['', '', '', ''],
+          ],
+        ),
+        createBlock('heading2', 'Follow-ups'),
+        createBlock('todo', 'Review active relationships'),
+      ],
+    }),
+  };
+
+  return templates[kind]?.() ?? null;
+}
+
 function makeTemplate(kind) {
+  const modernTemplate = makeModernTemplate(kind);
+  if (modernTemplate) return modernTemplate;
+
   if (kind === 'project') {
     return createPage({
       title: 'Untitled project',
@@ -424,7 +753,8 @@ function makeTemplate(kind) {
 export default function App() {
   const [pages, setPages] = useState(() => {
     const storedPages = readStoredJson(STORAGE_KEY, LEGACY_STORAGE_KEYS);
-    return storedPages ? normalizeImportedPages(storedPages) : starterPages();
+    const normalizedPages = storedPages ? normalizeImportedPages(storedPages) : [];
+    return normalizedPages.length ? normalizedPages : starterPages();
   });
   const [currentPageId, setCurrentPageId] = useState(() => pages[0]?.id);
   const [search, setSearch] = useState('');
@@ -436,7 +766,8 @@ export default function App() {
   const [activeBlockId, setActiveBlockId] = useState(null);
   const [installPrompt, setInstallPrompt] = useState(null);
   const [isInstalled, setIsInstalled] = useState(() => isStandaloneApp());
-  const [theme, setTheme] = useState(() => readStoredValue(THEME_STORAGE_KEY, LEGACY_THEME_STORAGE_KEYS) || 'light');
+  const [theme, setTheme] = useState(() => readInitialTheme());
+  const [workspaceLayout, setWorkspaceLayout] = useState(() => readInitialLayout());
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
@@ -444,21 +775,45 @@ export default function App() {
   const [toast, setToast] = useState('');
   const [introVisible, setIntroVisible] = useState(true);
   const [focusSprint, setFocusSprint] = useState({ running: false, seconds: 25 * 60 });
+  const [isOnline, setIsOnline] = useState(() => typeof navigator === 'undefined' || navigator.onLine);
+  const [clipperOpen, setClipperOpen] = useState(false);
   const startupActionHandled = useRef(false);
 
   const currentPage = pages.find((page) => page.id === currentPageId) ?? pages[0];
+  const activeLayout = normalizeLayoutValue(workspaceLayout);
   const currentInsights = useMemo(() => currentPage ? getAssistantInsights(currentPage, pages) : null, [currentPage, pages]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(pages));
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(pages));
+    } catch {
+      setToast('Could not save workspace locally');
+    }
   }, [pages]);
 
   useEffect(() => {
     const resolvedTheme = themes.some((item) => item.id === theme) ? theme : 'light';
     document.documentElement.dataset.theme = resolvedTheme;
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', themeColorFor(resolvedTheme));
-    localStorage.setItem(THEME_STORAGE_KEY, resolvedTheme);
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, resolvedTheme);
+    } catch {
+      setToast('Could not save theme locally');
+    }
   }, [theme]);
+
+  useEffect(() => {
+    const resolvedLayout = normalizeLayoutValue(workspaceLayout);
+    if (resolvedLayout !== workspaceLayout) {
+      setWorkspaceLayout(resolvedLayout);
+      return;
+    }
+    try {
+      localStorage.setItem(LAYOUT_STORAGE_KEY, resolvedLayout);
+    } catch {
+      setToast('Could not save layout locally');
+    }
+  }, [workspaceLayout]);
 
   useEffect(() => {
     if (!pages.some((page) => page.id === currentPageId)) {
@@ -510,6 +865,21 @@ export default function App() {
 
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, []);
+
+  useEffect(() => {
+    function updateOnlineStatus() {
+      setIsOnline(typeof navigator === 'undefined' || navigator.onLine);
+    }
+
+    window.addEventListener('online', updateOnlineStatus);
+    window.addEventListener('offline', updateOnlineStatus);
+    updateOnlineStatus();
+
+    return () => {
+      window.removeEventListener('online', updateOnlineStatus);
+      window.removeEventListener('offline', updateOnlineStatus);
+    };
   }, []);
 
   useEffect(() => {
@@ -579,11 +949,15 @@ export default function App() {
   const recentPages = useMemo(() => getRecentPages(pages, currentPage?.id), [currentPage?.id, pages]);
   const taskQueue = useMemo(() => getTaskQueue(pages), [pages]);
   const workspaceStats = useMemo(() => getWorkspaceStats(pages), [pages]);
+  const smartNotifications = useMemo(
+    () => currentPage && currentInsights ? getSmartNotifications(currentPage, pages, currentInsights, isOnline) : [],
+    [currentInsights, currentPage, isOnline, pages],
+  );
 
   function commitPages(updater) {
     setPages((existing) => {
       const nextPages = typeof updater === 'function' ? updater(existing) : updater;
-      return nextPages;
+      return Array.isArray(nextPages) && nextPages.length ? normalizeImportedPages(nextPages) : starterPages();
     });
   }
 
@@ -602,7 +976,11 @@ export default function App() {
         return {
           ...page,
           updatedAt: nowStamp(),
-          blocks: page.blocks.map((block) => (block.id === blockId ? { ...block, ...patch } : block)),
+          blocks: page.blocks.map((block) => {
+            if (block.id !== blockId) return block;
+            const nextPatch = typeof patch === 'function' ? patch(block) : patch;
+            return { ...block, ...nextPatch };
+          }),
         };
       }),
     );
@@ -734,8 +1112,81 @@ export default function App() {
     setTimeout(() => focusBlock(blocks[0].id), 30);
   }
 
+  function insertBlocksAfterBlock(blockId, blocks, message) {
+    if (!blocks.length) return;
+    commitPages((existing) =>
+      existing.map((page) => {
+        if (page.id !== currentPage.id) return page;
+        const index = page.blocks.findIndex((block) => block.id === blockId);
+        const nextBlocks = [...page.blocks];
+        nextBlocks.splice(index >= 0 ? index + 1 : page.blocks.length, 0, ...blocks);
+        return { ...page, updatedAt: nowStamp(), blocks: nextBlocks };
+      }),
+    );
+    setToast(message);
+    setTimeout(() => focusBlock(blocks[0].id), 30);
+  }
+
+  function runBlockAssistant(blockId) {
+    const block = currentPage.blocks.find((item) => item.id === blockId);
+    if (!block) return;
+    insertBlocksAfterBlock(
+      blockId,
+      [createBlock('callout', getBlockAiSuggestion(block, currentPage))],
+      'Block AI suggestion inserted',
+    );
+  }
+
+  function clipToCurrentPage(clip) {
+    const summary = summarizeClip(clip);
+    appendBlocksToCurrentPage(
+      [
+        createBlock('heading2', clip.title || 'Web clip'),
+        createBlock('callout', summary),
+        createBlock('paragraph', `Source: ${clip.url || 'Pasted clip'}`),
+        createBlock('todo', 'Review this clip and connect it to the right page or project.'),
+      ],
+      'Clip summarized into current page',
+    );
+  }
+
+  function togglePageRelation(targetPageId) {
+    if (!targetPageId || targetPageId === currentPage.id) return;
+    commitPages((existing) => {
+      const source = existing.find((page) => page.id === currentPage.id);
+      const target = existing.find((page) => page.id === targetPageId);
+      if (!source || !target) return existing;
+      const isLinked = (source.relations ?? []).includes(targetPageId);
+
+      return existing.map((page) => {
+        if (page.id === source.id) {
+          return {
+            ...page,
+            updatedAt: nowStamp(),
+            relations: isLinked
+              ? (page.relations ?? []).filter((id) => id !== targetPageId)
+              : [...new Set([...(page.relations ?? []), targetPageId])],
+          };
+        }
+
+        if (page.id === target.id) {
+          return {
+            ...page,
+            updatedAt: nowStamp(),
+            relations: isLinked
+              ? (page.relations ?? []).filter((id) => id !== source.id)
+              : [...new Set([...(page.relations ?? []), source.id])],
+          };
+        }
+
+        return page;
+      });
+    });
+    setToast('Relation updated both ways');
+  }
+
   function createCustomTable(columns, rows) {
-    return { ...createBlock('table'), columns, rows };
+    return createTableBlock(columns, rows);
   }
 
   function runAssistantAction(action, payload = '') {
@@ -1234,6 +1685,7 @@ export default function App() {
       id: createId('page'),
       title: `${currentPage.title} copy`,
       favorite: false,
+      relations: [],
       createdAt: nowStamp(),
       updatedAt: nowStamp(),
       blocks: currentPage.blocks.map(cloneBlock),
@@ -1272,6 +1724,13 @@ export default function App() {
   function changeTheme(nextTheme) {
     setTheme(nextTheme);
     setAppearanceOpen(false);
+  }
+
+  function changeLayout(nextLayout) {
+    const nextOption = layoutOptions.find((item) => item.id === normalizeLayoutValue(nextLayout)) ?? layoutOptions[0];
+    setWorkspaceLayout(nextOption.id);
+    setAppearanceOpen(false);
+    setToast(`${nextOption.code} ${nextOption.label} layout applied`);
   }
 
   function exportCurrentPage() {
@@ -1353,7 +1812,8 @@ export default function App() {
   }
 
   return (
-    <div className={`app-shell ${sidebarOpen ? '' : 'sidebar-collapsed'} ${focusMode ? 'focus-mode' : ''}`}>
+    <div className={`app-shell layout-${activeLayout} ${sidebarOpen ? '' : 'sidebar-collapsed'} ${focusMode ? 'focus-mode' : ''}`}>
+      <FocusRail focusSprint={focusSprint} />
       {introVisible && <NovaIntro onDismiss={() => setIntroVisible(false)} />}
       <Sidebar
         pages={pages}
@@ -1387,7 +1847,11 @@ export default function App() {
       <main className="workspace">
         <Topbar
           page={currentPage}
+          insights={currentInsights}
+          notifications={smartNotifications}
           theme={theme}
+          layout={activeLayout}
+          isOnline={isOnline}
           appearanceOpen={appearanceOpen}
           sidebarOpen={sidebarOpen}
           focusMode={focusMode}
@@ -1397,8 +1861,10 @@ export default function App() {
           onExport={exportCurrentPage}
           onExportWorkspace={exportWorkspaceData}
           onImportWorkspace={importWorkspaceData}
+          onOpenClipper={() => setClipperOpen(true)}
           onOpenCommands={() => setCommandOpen(true)}
           onThemeChange={changeTheme}
+          onLayoutChange={changeLayout}
           onDuplicate={duplicatePage}
           onDelete={() => deletePage(currentPage.id)}
           onReset={resetWorkspace}
@@ -1410,18 +1876,28 @@ export default function App() {
 
         <div className="content-grid">
           <section className="editor-shell" aria-label="Page editor">
-            <PageCommandCenter
-              page={currentPage}
-              insights={currentInsights}
-              workspaceStats={workspaceStats}
-              focusSprint={focusSprint}
-              onToggleSprint={toggleFocusSprint}
-              onResetSprint={resetFocusSprint}
-              onAssistantAction={runAssistantAction}
-              onAddSmartTask={addSmartTask}
-              onUpdatePage={updateCurrentPage}
-            />
             <PageHeader page={currentPage} onUpdatePage={updateCurrentPage} />
+            <div className="page-tools-strip">
+              <PageCommandCenter
+                page={currentPage}
+                insights={currentInsights}
+                workspaceStats={workspaceStats}
+                focusSprint={focusSprint}
+                onToggleSprint={toggleFocusSprint}
+                onResetSprint={resetFocusSprint}
+                onAssistantAction={runAssistantAction}
+                onAddSmartTask={addSmartTask}
+                onAddPage={addPage}
+                onUpdatePage={updateCurrentPage}
+              />
+              <AssistantPanel
+                page={currentPage}
+                pages={pages}
+                onRunAction={runAssistantAction}
+                onUpdatePage={updateCurrentPage}
+                onSelectPage={selectPage}
+              />
+            </div>
 
             <div className="block-list">
               {currentPage.blocks.map((block) => (
@@ -1438,6 +1914,7 @@ export default function App() {
                   onDuplicate={() => duplicateBlock(block.id)}
                   onMoveUp={() => moveBlock(block.id, -1)}
                   onMoveDown={() => moveBlock(block.id, 1)}
+                  onAskAI={() => runBlockAssistant(block.id)}
                   onApplyCommand={applyCommand}
                 />
               ))}
@@ -1458,9 +1935,9 @@ export default function App() {
               page={currentPage}
               pages={pages}
               onUpdatePage={updateCurrentPage}
-              onInsertBlock={(type) => insertBlock(currentPage.blocks.at(-1)?.id, type)}
-              onAssistantAction={runAssistantAction}
               onSelectPage={selectPage}
+              onToggleRelation={togglePageRelation}
+              onInsertBlock={(type) => insertBlock(currentPage.blocks.at(-1)?.id, type)}
               onFocusBlock={(blockId) => {
                 setActiveBlockId(blockId);
                 setTimeout(() => focusBlock(blockId), 30);
@@ -1483,6 +1960,14 @@ export default function App() {
           onExportPage={exportCurrentPage}
           onExportWorkspace={exportWorkspaceData}
           onAssistantAction={runAssistantAction}
+        />
+      )}
+
+      {clipperOpen && (
+        <ClipperModal
+          page={currentPage}
+          onClose={() => setClipperOpen(false)}
+          onClip={clipToCurrentPage}
         />
       )}
 
@@ -1579,6 +2064,97 @@ function getWorkspaceStats(pages) {
   };
 }
 
+function getActivityItems(page, pages = []) {
+  const recentWorkspacePages = [...pages]
+    .filter((item) => item.id !== page.id)
+    .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+    .slice(0, 3);
+  const stats = getPageStats(page);
+  const openTasks = stats.todos - stats.done;
+
+  return [
+    {
+      label: 'Smart digest',
+      detail: `${openTasks} open task${openTasks === 1 ? '' : 's'} / ${stats.words} words / edited ${formatDate(page.updatedAt)}`,
+    },
+    {
+      label: page.status || 'Draft',
+      detail: `${page.priority || 'Normal'} priority${page.dueDate ? ` / due ${formatDueDate(page.dueDate)}` : ' / no due date'}`,
+    },
+    ...recentWorkspacePages.map((item) => ({
+      label: item.title || 'Untitled',
+      detail: `${item.section || 'Private'} / edited ${formatDate(item.updatedAt)}`,
+    })),
+  ];
+}
+
+function getSmartNotifications(page, pages = [], insights, isOnline = true) {
+  const stats = getPageStats(page);
+  const openTasks = stats.todos - stats.done;
+  const recentPages = [...pages]
+    .filter((item) => item.id !== page.id)
+    .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+    .slice(0, 2);
+
+  return [
+    !isOnline && {
+      title: 'Offline-first active',
+      detail: 'Changes are saved locally and stay on this device until you reconnect.',
+      tone: 'warn',
+    },
+    {
+      title: insights?.score >= 70 ? 'Page is sharp' : 'Page needs shape',
+      detail: insights?.bestMove || 'Add one clear next step.',
+      tone: insights?.score >= 70 ? 'good' : 'warn',
+    },
+    openTasks > 0 && {
+      title: `${openTasks} open task${openTasks === 1 ? '' : 's'}`,
+      detail: 'AI recommends ordering the next task before adding more notes.',
+      tone: 'action',
+    },
+    ...(recentPages.map((item) => ({
+      title: item.title || 'Untitled',
+      detail: `Updated ${formatDate(item.updatedAt)} in ${item.section || 'Private'}`,
+      tone: 'info',
+    }))),
+  ].filter(Boolean).slice(0, 5);
+}
+
+function getBlockAiSuggestion(block, page) {
+  const text = compactText(getBlockText(block), 220);
+  if (block.type === 'table') {
+    return 'Block AI: This linked data block can be checked in Table, Board, Timeline, and Chart views. Add status or priority values so the alternate views become more useful.';
+  }
+  if (block.type === 'canvas') {
+    return 'Block AI: Turn the strongest canvas card into a decision, then add one action card so the moodboard becomes executable.';
+  }
+  if (block.type === 'todo') {
+    return `Block AI: Make this task finishable by adding an owner, date, or done condition. Task: ${text || 'Untitled task'}`;
+  }
+  if (block.type === 'heading1' || block.type === 'heading2') {
+    return `Block AI: Under "${text || page.title}", add context, decision, and next-step blocks so the section scans like a mini brief.`;
+  }
+  if (block.type === 'callout') {
+    return `Block AI: This callout is a good signal. Convert it into either a decision or a checklist item next.`;
+  }
+  return `Block AI: ${text ? `This block says "${text}". ` : ''}Clarify the point, connect it to the page goal, and add one next move below it.`;
+}
+
+function summarizeClip({ url = '', title = '', notes = '' }) {
+  const source = title || url || 'Pasted source';
+  const cleanNotes = cleanInlineText(notes);
+  const summary = cleanNotes
+    ? compactText(cleanNotes, 180)
+    : 'No body text was pasted, so Nova captured the source and created a review task.';
+  let domain = 'manual clip';
+  try {
+    domain = url ? new URL(url.startsWith('http') ? url : `https://${url}`).hostname.replace(/^www\./, '') : 'manual clip';
+  } catch {
+    domain = 'pasted source';
+  }
+  return `Web clip from ${domain}: ${source}. AI digest: ${summary}`;
+}
+
 function isStandaloneApp() {
   return (
     window.matchMedia?.('(display-mode: standalone)').matches ||
@@ -1588,6 +2164,25 @@ function isStandaloneApp() {
 
 function themeColorFor(theme) {
   return themes.find((item) => item.id === theme)?.swatches?.[1] ?? '#2f6f68';
+}
+
+function FocusRail({ focusSprint }) {
+  const totalSeconds = 25 * 60;
+  const elapsed = Math.max(0, totalSeconds - Math.min(totalSeconds, focusSprint.seconds));
+  const progress = focusSprint.running ? elapsed / totalSeconds : 0;
+  const activeSegment = focusSprint.running ? Math.min(13, Math.floor(progress * 14)) : -1;
+  const doneSegments = Math.floor(progress * 14);
+
+  return (
+    <div className={`focus-rail ${focusSprint.running ? 'is-running' : ''}`} aria-hidden="true">
+      {Array.from({ length: 14 }).map((_, index) => (
+        <span
+          key={index}
+          className={index < doneSegments ? 'done' : index === activeSegment ? 'active' : ''}
+        />
+      ))}
+    </div>
+  );
 }
 
 function focusBlock(blockId) {
@@ -1636,6 +2231,7 @@ function normalizeImportedPages(payload) {
         priority: priorityOptions.includes(page.priority) ? page.priority : 'Normal',
         noteDate: normalizeDateInputValue(page.noteDate, normalizeDateInputValue(page.createdAt, todayDateValue())),
         dueDate: normalizeDateInputValue(page.dueDate),
+        relations: Array.isArray(page.relations) ? page.relations.filter((id) => typeof id === 'string').slice(0, 20) : [],
         createdAt: typeof page.createdAt === 'string' ? page.createdAt : nowStamp(),
         updatedAt: typeof page.updatedAt === 'string' ? page.updatedAt : nowStamp(),
         blocks,
@@ -1647,22 +2243,55 @@ function normalizeImportedBlock(block) {
   if (!block || typeof block !== 'object') return createParagraph('');
   const id = typeof block.id === 'string' && block.id ? block.id : createId('block');
   const type = typeof block.type === 'string' ? block.type : 'paragraph';
+  const annotations = Array.isArray(block.annotations)
+    ? block.annotations
+        .filter((annotation) => annotation && typeof annotation === 'object')
+        .map((annotation) => ({
+          id: typeof annotation.id === 'string' && annotation.id ? annotation.id : createId('annotation'),
+          text: String(annotation.text ?? '').trim(),
+          quote: String(annotation.quote ?? '').trim(),
+          createdAt: typeof annotation.createdAt === 'string' ? annotation.createdAt : nowStamp(),
+          resolved: Boolean(annotation.resolved),
+        }))
+        .filter((annotation) => annotation.text)
+        .slice(0, 50)
+    : [];
 
   if (type === 'table') {
     return {
       id,
       type,
+      annotations,
       columns: Array.isArray(block.columns) && block.columns.length ? block.columns.map(String) : ['Task', 'Status', 'Owner'],
-      rows: Array.isArray(block.rows) ? block.rows.map((row) => Array.isArray(row) ? row.map(String) : []) : [],
+      rows: Array.isArray(block.rows)
+        ? block.rows.map((row) => Array.isArray(row) ? row.map(String) : [])
+        : createTableBlock().rows,
     };
   }
 
-  if (type === 'divider') return { id, type };
-  if (type === 'todo') return { id, type, text: String(block.text ?? ''), checked: Boolean(block.checked) };
+  if (type === 'canvas') {
+    return {
+      id,
+      type,
+      annotations,
+      cards: Array.isArray(block.cards) && block.cards.length
+        ? block.cards.map((card) => ({
+            id: typeof card.id === 'string' && card.id ? card.id : createId('card'),
+            title: String(card.title ?? 'Idea'),
+            body: String(card.body ?? ''),
+            tone: String(card.tone ?? 'violet'),
+          }))
+        : createCanvasBlock().cards,
+    };
+  }
+
+  if (type === 'divider') return { id, type, annotations };
+  if (type === 'todo') return { id, type, annotations, text: String(block.text ?? ''), checked: Boolean(block.checked) };
   if (type === 'date') {
     return {
       id,
       type,
+      annotations,
       date: normalizeDateInputValue(block.date, todayDateValue()),
       text: String(block.text ?? ''),
     };
@@ -1671,26 +2300,30 @@ function normalizeImportedBlock(block) {
     return {
       id,
       type,
+      annotations,
       text: String(block.text ?? 'Toggle heading'),
       body: String(block.body ?? ''),
       open: block.open !== false,
     };
   }
-  return { id, type, text: String(block.text ?? '') };
+  return { id, type, annotations, text: String(block.text ?? '') };
 }
 
 function getPageStats(page) {
-  const text = page.blocks.map(getBlockText).join(' ');
+  const blocks = Array.isArray(page.blocks) ? page.blocks : [];
+  const text = blocks.map(getBlockText).join(' ');
   const words = text.trim() ? text.trim().split(/\s+/).length : 0;
-  const todos = page.blocks.filter((block) => block.type === 'todo').length;
-  const done = page.blocks.filter((block) => block.type === 'todo' && block.checked).length;
-  const dates = page.blocks.filter((block) => block.type === 'date').length;
+  const todos = blocks.filter((block) => block.type === 'todo').length;
+  const done = blocks.filter((block) => block.type === 'todo' && block.checked).length;
+  const dates = blocks.filter((block) => block.type === 'date').length;
   const readTime = Math.max(1, Math.ceil(words / 220));
   return { words, todos, done, dates, readTime };
 }
 
 function getBlockText(block) {
-  if (block.type === 'table') return block.rows.flat().join(' ');
+  if (!block || typeof block !== 'object') return '';
+  if (block.type === 'table') return (Array.isArray(block.rows) ? block.rows : []).flat().join(' ');
+  if (block.type === 'canvas') return (block.cards ?? []).map((card) => [card.title, card.body].filter(Boolean).join(' ')).join(' ');
   if (block.type === 'divider') return '';
   if (block.type === 'date') return [block.date, block.text].filter(Boolean).join(' ');
   if (block.type === 'toggle') return [block.text, block.body].filter(Boolean).join(' ');
@@ -1698,7 +2331,7 @@ function getBlockText(block) {
 }
 
 function getPagePlainText(page) {
-  return page.blocks.map(getBlockText).filter(Boolean).join(' ');
+  return (Array.isArray(page.blocks) ? page.blocks : []).map(getBlockText).filter(Boolean).join(' ');
 }
 
 function cleanInlineText(value = '') {
@@ -1716,9 +2349,10 @@ function uniqueItems(items) {
 }
 
 function getMeaningfulLines(page) {
-  return page.blocks
+  return (Array.isArray(page.blocks) ? page.blocks : [])
     .flatMap((block) => {
-      if (block.type === 'table') return block.rows.map((row) => row.filter(Boolean).join(' / '));
+      if (block.type === 'table') return (Array.isArray(block.rows) ? block.rows : []).map((row) => row.filter(Boolean).join(' / '));
+      if (block.type === 'canvas') return (block.cards ?? []).map((card) => [card.title, card.body].filter(Boolean).join(' / '));
       return getBlockText(block);
     })
     .map(cleanInlineText)
@@ -1726,10 +2360,57 @@ function getMeaningfulLines(page) {
 }
 
 function getOpenTaskTexts(page) {
-  return page.blocks
+  return (Array.isArray(page.blocks) ? page.blocks : [])
     .filter((block) => block.type === 'todo' && !block.checked)
     .map((block) => cleanInlineText(block.text))
     .filter(Boolean);
+}
+
+function getWorkTreeData(page, pages = []) {
+  const explicitIds = new Set([
+    ...(page.relations ?? []),
+    ...pages
+      .filter((item) => (item.relations ?? []).includes(page.id))
+      .map((item) => item.id),
+  ]);
+  const relationPages = pages
+    .filter((item) => item.id !== page.id && explicitIds.has(item.id))
+    .sort((a, b) => (a.title || 'Untitled').localeCompare(b.title || 'Untitled'));
+  const relatedSuggestions = getRelatedPages(page, pages)
+    .filter((item) => !explicitIds.has(item.id))
+    .slice(0, 3);
+  const sectionPages = pages
+    .filter((item) => item.id !== page.id && item.section === page.section && !explicitIds.has(item.id))
+    .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+    .slice(0, 4);
+  const blocks = Array.isArray(page.blocks) ? page.blocks : [];
+  const tasks = blocks
+    .filter((block) => block.type === 'todo')
+    .map((block) => ({
+      id: block.id,
+      text: cleanInlineText(block.text) || 'Untitled task',
+      checked: Boolean(block.checked),
+    }));
+  const outlineItems = getOutlineItems(page).slice(0, 5);
+  const dataBlocks = blocks
+    .filter((block) => block.type === 'table' || block.type === 'canvas')
+    .map((block) => ({
+      id: block.id,
+      type: block.type,
+      label: block.type === 'table'
+        ? `${block.rows?.length ?? 0} row database`
+        : `${block.cards?.length ?? 0} card canvas`,
+    }));
+
+  return {
+    tasks,
+    doneTasks: tasks.filter((task) => task.checked).length,
+    relationPages,
+    relatedSuggestions,
+    sectionPages,
+    outlineItems,
+    dataBlocks,
+  };
 }
 
 function getRiskLines(lines) {
@@ -1828,16 +2509,20 @@ function getAssistantKeywords(page) {
 function getRelatedPages(page, pages = []) {
   const sourceTags = new Set(page.tags ?? []);
   const sourceWords = getAssistantKeywords(page);
+  const explicitRelations = new Set(page.relations ?? []);
 
   return pages
     .filter((item) => item.id !== page.id)
     .map((item) => {
+      const explicit = explicitRelations.has(item.id) || (item.relations ?? []).includes(page.id);
       const sharedTags = (item.tags ?? []).filter((tag) => sourceTags.has(tag));
       const targetWords = getAssistantKeywords(item);
       const overlaps = [...sourceWords].filter((word) => targetWords.has(word)).slice(0, 3);
       const sameSection = item.section === page.section ? 1 : 0;
-      const score = sharedTags.length * 5 + overlaps.length * 2 + sameSection;
-      const reason = sharedTags.length
+      const score = (explicit ? 100 : 0) + sharedTags.length * 5 + overlaps.length * 2 + sameSection;
+      const reason = explicit
+        ? 'Two-way relation'
+        : sharedTags.length
         ? `Shares ${sharedTags.map((tag) => `#${tag}`).join(', ')}`
         : overlaps.length
           ? `Overlaps on ${overlaps.join(', ')}`
@@ -2649,6 +3334,17 @@ function pageToMarkdown(page) {
     else if (block.type === 'divider') lines.push('', '---', '');
     else if (block.type === 'table') lines.push(...tableToMarkdown(block), '');
     else lines.push(block.text || '', '');
+
+    if (block.annotations?.length) {
+      block.annotations.forEach((annotation) => {
+        const state = annotation.resolved ? 'resolved' : 'open';
+        lines.push(
+          `> Annotation (${state}): ${annotation.text}`,
+          ...(annotation.quote ? [`> Selected text: "${annotation.quote}"`] : []),
+          '',
+        );
+      });
+    }
   });
 
   return `${lines.join('\n').replace(/\n{3,}/g, '\n\n').trim()}\n`;
@@ -2840,6 +3536,13 @@ function Sidebar({
         </button>
       </div>
 
+      <TemplateShelf
+        title="Templates"
+        templates={templateLibrary}
+        variant="sidebar"
+        onPick={onAddPage}
+      />
+
       <form className="quick-composer" onSubmit={submitComposer}>
         <div className="composer-tabs" role="group" aria-label="Quick add type">
           <button
@@ -2965,31 +3668,104 @@ function Sidebar({
 function PageGroup({ title, pages, currentPageId, onSelectPage }) {
   return (
     <section className="page-group">
-      <div className="group-label">{title}</div>
-      {pages.map((page) => (
+      <div className="group-label">
+        <span>{title}</span>
+        <small>{pages.length}</small>
+      </div>
+      <div className="page-group-list">
+        {pages.map((page) => {
+          const metaItems = [
+            page.status || 'Draft',
+            page.priority || 'Normal',
+            page.tags?.[0] || page.section,
+          ].filter(Boolean);
+
+          return (
+            <button
+              key={page.id}
+              type="button"
+              className={`page-link ${page.id === currentPageId ? 'active' : ''}`}
+              onClick={() => onSelectPage(page.id)}
+            >
+              <span className="page-emoji" aria-hidden="true">
+                {page.icon || (page.title || 'N').slice(0, 2)}
+              </span>
+              <span className="page-link-body">
+                <span className="page-link-title">{page.title || 'Untitled'}</span>
+                <span className="page-link-subtitle">{metaItems.join(' / ')}</span>
+              </span>
+              <span className="page-link-actions" aria-hidden="true">
+                {page.favorite ? <Star className="page-star" size={13} fill="currentColor" /> : <span />}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function TemplateShelf({ title, templates, variant = 'sidebar', onPick }) {
+  const isCollapsible = variant === 'sidebar';
+  const [open, setOpen] = useState(!isCollapsible);
+
+  return (
+    <section className={`template-shelf template-shelf-${variant} ${open ? '' : 'is-collapsed'}`} aria-label={title}>
+      {isCollapsible ? (
         <button
-          key={page.id}
           type="button"
-          className={`page-link ${page.id === currentPageId ? 'active' : ''}`}
-          onClick={() => onSelectPage(page.id)}
+          className="template-shelf-heading template-shelf-toggle"
+          aria-expanded={open}
+          onClick={() => setOpen((value) => !value)}
         >
-          <span className="page-emoji" aria-hidden="true">
-            {page.icon}
+          <span>{title}</span>
+          <span className="template-shelf-actions">
+            <small>{templates.length}</small>
+            {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           </span>
-          <span className="page-link-body">
-            <span className="page-link-title">{page.title || 'Untitled'}</span>
-            <span className="page-link-subtitle">{page.status || 'Draft'} / {page.priority || 'Normal'}{page.tags?.[0] ? ` / ${page.tags[0]}` : ''}</span>
-          </span>
-          {page.favorite && <Star className="page-star" size={14} fill="currentColor" />}
         </button>
-      ))}
+      ) : (
+        <div className="template-shelf-heading">
+          <span>{title}</span>
+          <small>{templates.length}</small>
+        </div>
+      )}
+      {open && (
+        <div className="template-grid">
+          {templates.map((template) => {
+            const Icon = template.icon;
+            return (
+              <button
+                key={template.kind}
+                type="button"
+                className="template-card"
+                onClick={() => onPick(template.kind)}
+                title={`${template.label}: ${template.description}`}
+              >
+                <span className="template-icon" aria-hidden="true">
+                  <Icon size={16} />
+                </span>
+                <span className="template-copy">
+                  <strong>{template.label}</strong>
+                  <small>{template.description}</small>
+                </span>
+                <span className="template-meta">{template.meta}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 }
 
 function Topbar({
   page,
+  insights,
+  notifications,
   theme,
+  layout,
+  isOnline,
   appearanceOpen,
   sidebarOpen,
   focusMode,
@@ -2999,8 +3775,10 @@ function Topbar({
   onExport,
   onExportWorkspace,
   onImportWorkspace,
+  onOpenClipper,
   onOpenCommands,
   onThemeChange,
+  onLayoutChange,
   onDuplicate,
   onDelete,
   onReset,
@@ -3008,7 +3786,18 @@ function Topbar({
   onInstall,
 }) {
   const activeTheme = themes.find((item) => item.id === theme) ?? themes[0];
+  const activeLayout = layoutOptions.find((item) => item.id === normalizeLayoutValue(layout)) ?? layoutOptions[0];
   const ThemeIcon = activeTheme.icon;
+  const LayoutIcon = activeLayout.icon;
+  const [appearanceSections, setAppearanceSections] = useState({ layouts: true, themes: false });
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+
+  function toggleAppearanceSection(section) {
+    setAppearanceSections((sections) => ({
+      ...sections,
+      [section]: !sections[section],
+    }));
+  }
 
   return (
     <header className="topbar">
@@ -3026,6 +3815,36 @@ function Topbar({
       </div>
 
       <div className="topbar-actions">
+        {insights && (
+          <button
+            type="button"
+            className="smart-alert"
+            title={insights.summary}
+            aria-expanded={notificationsOpen}
+            onClick={() => setNotificationsOpen((open) => !open)}
+          >
+            <Bell size={14} />
+            {notifications?.length ?? 0}
+          </button>
+        )}
+        {notificationsOpen && (
+          <div className="notification-panel" role="dialog" aria-label="Smart notifications">
+            <div className="notification-panel-head">
+              <strong>Smart notifications</strong>
+              <small>AI digest since last pass</small>
+            </div>
+            {(notifications ?? []).map((item) => (
+              <span key={`${item.title}-${item.detail}`} className={`notification-item ${item.tone || ''}`}>
+                <strong>{item.title}</strong>
+                <small>{item.detail}</small>
+              </span>
+            ))}
+          </div>
+        )}
+        <span className={`sync-status ${isOnline ? 'online' : 'offline'}`} title={isOnline ? 'Online and saved locally' : 'Offline mode: changes stay on this device'}>
+          <span aria-hidden="true" />
+          {isOnline ? 'Synced' : 'Offline'}
+        </span>
         <span className="saved-state">
           <Clock3 size={15} />
           Edited {formatDate(page.updatedAt)}
@@ -3034,12 +3853,30 @@ function Topbar({
           <ThemeIcon size={15} />
           {activeTheme.label}
         </span>
+        <button
+          type="button"
+          className="layout-status layout-status-button"
+          title={`Choose layout: ${activeLayout.code} ${activeLayout.label}`}
+          onClick={onToggleAppearance}
+        >
+          <LayoutIcon size={15} />
+          <span className="layout-code">{activeLayout.code}</span>
+          <span className="layout-status-text">Layout</span>
+        </button>
+        <div className="presence-stack" aria-label="Live collaborators">
+          <span title="Cris is editing">C</span>
+          <span title="Nova AI is reading">AI</span>
+          <span title="Planner is viewing">P</span>
+        </div>
         {canInstall && (
           <button type="button" className="install-button" onClick={onInstall}>
             <Download size={16} />
             Install
           </button>
         )}
+        <button type="button" className="icon-button optional-action" title="Clip from web" onClick={onOpenClipper}>
+          <Link2 size={17} />
+        </button>
         <button
           type="button"
           className="icon-button optional-action"
@@ -3082,7 +3919,7 @@ function Topbar({
         <button
           type="button"
           className={`icon-button more-action ${appearanceOpen ? 'active' : ''}`}
-          title={appearanceOpen ? 'Collapse themes' : 'Show themes'}
+          title={appearanceOpen ? 'Collapse layout and themes' : 'Choose layout and themes'}
           aria-controls="appearance-panel"
           aria-expanded={appearanceOpen}
           onClick={onToggleAppearance}
@@ -3090,41 +3927,146 @@ function Topbar({
           <MoreHorizontal size={18} />
         </button>
         {appearanceOpen && (
-          <div className="topbar-menu" role="dialog" aria-label="Appearance">
-            <div className="panel-heading">
-              <span>Appearance</span>
-              <Palette size={15} />
-            </div>
-            <div className="theme-grid" role="radiogroup" aria-label="Theme">
-              {themes.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className={`theme-choice ${theme === item.id ? 'active' : ''}`}
-                    onClick={() => onThemeChange(item.id)}
-                    role="radio"
-                    aria-checked={theme === item.id}
-                  >
-                    <span className="theme-choice-head">
-                      <Icon size={15} />
-                      {item.label}
-                      {item.background && <span className="theme-badge">BG</span>}
-                    </span>
-                    <span className="theme-swatches" aria-hidden="true">
-                      {item.swatches.map((color) => (
-                        <span key={color} style={{ background: color }} />
-                      ))}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+          <div id="appearance-panel" className="topbar-menu" role="dialog" aria-label="Appearance">
+            <button
+              type="button"
+              className="panel-heading menu-section-heading appearance-section-toggle"
+              aria-expanded={appearanceSections.layouts}
+              onClick={() => toggleAppearanceSection('layouts')}
+            >
+              <span>Layout versions</span>
+              <span className="panel-heading-actions">
+                <SlidersHorizontal size={15} />
+                {appearanceSections.layouts ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+              </span>
+            </button>
+            {appearanceSections.layouts && (
+              <div className="layout-choice-grid" role="radiogroup" aria-label="Layout version">
+                {layoutOptions.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={`layout-choice ${layout === item.id ? 'active' : ''}`}
+                      onClick={() => onLayoutChange(item.id)}
+                      role="radio"
+                      aria-checked={layout === item.id}
+                    >
+                      <span className="layout-choice-head">
+                        <span className="layout-code">{item.code}</span>
+                        <Icon size={15} />
+                        {item.label}
+                      </span>
+                      <span className={`layout-preview layout-preview-${item.id}`} aria-hidden="true">
+                        <span />
+                        <span />
+                        <span />
+                        <span />
+                      </span>
+                      <small>{item.description}</small>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <button
+              type="button"
+              className="panel-heading menu-section-heading theme-section-heading appearance-section-toggle"
+              aria-expanded={appearanceSections.themes}
+              onClick={() => toggleAppearanceSection('themes')}
+            >
+              <span>Themes</span>
+              <span className="panel-heading-actions">
+                <Palette size={15} />
+                {appearanceSections.themes ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+              </span>
+            </button>
+            {appearanceSections.themes && (
+              <div className="theme-grid" role="radiogroup" aria-label="Theme">
+                {themes.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={`theme-choice ${theme === item.id ? 'active' : ''}`}
+                      onClick={() => onThemeChange(item.id)}
+                      role="radio"
+                      aria-checked={theme === item.id}
+                    >
+                      <span className="theme-choice-head">
+                        <Icon size={15} />
+                        {item.label}
+                        {item.background && <span className="theme-badge">BG</span>}
+                      </span>
+                      <span className="theme-swatches" aria-hidden="true">
+                        {item.swatches.map((color) => (
+                          <span key={color} style={{ background: color }} />
+                        ))}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
       </div>
     </header>
+  );
+}
+
+function ClipperModal({ page, onClose, onClip }) {
+  const [url, setUrl] = useState('');
+  const [title, setTitle] = useState('');
+  const [notes, setNotes] = useState('');
+
+  function submitClip(event) {
+    event.preventDefault();
+    onClip({
+      url: url.trim(),
+      title: title.trim() || `Clip for ${page.title || 'current page'}`,
+      notes: notes.trim(),
+    });
+    onClose();
+  }
+
+  return (
+    <div className="clipper-overlay" role="presentation" onMouseDown={onClose}>
+      <section className="clipper-modal" role="dialog" aria-label="Web clipper" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="clipper-head">
+          <span>
+            <strong>Web clipper</strong>
+            <small>Clip anything, then Nova digests it into this page.</small>
+          </span>
+          <button type="button" className="icon-button" title="Close clipper" onClick={onClose}>
+            <X size={16} />
+          </button>
+        </div>
+        <form className="clipper-form" onSubmit={submitClip}>
+          <label>
+            <span>URL</span>
+            <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://example.com/article" />
+          </label>
+          <label>
+            <span>Title</span>
+            <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Source title" />
+          </label>
+          <label>
+            <span>Content or notes</span>
+            <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={6} placeholder="Paste the important part. Nova will summarize it locally." />
+          </label>
+          <div className="clipper-actions">
+            <button type="button" onClick={onClose}>Cancel</button>
+            <button type="submit" className="primary-action">
+              <Link2 size={15} />
+              Clip and summarize
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
   );
 }
 
@@ -3144,9 +4086,12 @@ function CommandPalette({
   const term = query.trim().toLowerCase();
   const actions = [
     { label: 'New page', hint: 'Create a blank page', icon: Plus, run: () => onRun(() => onAddPage('blank')) },
-    { label: 'New notes page', hint: 'Start a notes template', icon: BookOpen, run: () => onRun(() => onAddPage('notes')) },
-    { label: 'New project page', hint: 'Start a project template', icon: LayoutGrid, run: () => onRun(() => onAddPage('project')) },
-    { label: 'Open today note', hint: 'Create or open today journal page', icon: CalendarDays, run: () => onRun(() => onAddPage('daily')) },
+    ...templateLibrary.map((template) => ({
+      label: `Template: ${template.label}`,
+      hint: template.description,
+      icon: template.icon,
+      run: () => onRun(() => onAddPage(template.kind)),
+    })),
     { label: 'Toggle focus mode', hint: 'Hide navigation and panels', icon: Maximize2, run: () => onRun(onToggleFocus) },
     { label: 'AI summary', hint: 'Insert a page summary from Nova AI', icon: Star, run: () => onRun(() => onAssistantAction('summary')) },
     { label: 'AI smart brief', hint: 'Insert context, signal, and best next move', icon: FileText, run: () => onRun(() => onAssistantAction('brief')) },
@@ -3275,10 +4220,16 @@ function PageCommandCenter({
   onResetSprint,
   onAssistantAction,
   onAddSmartTask,
+  onAddPage,
   onUpdatePage,
 }) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    setOpen(false);
+  }, [page.id]);
   if (!insights) return null;
   const stats = insights.stats;
+  const healthItems = getPageHealth(page);
   const dueDelta = dateDeltaFromToday(page.dueDate);
   const completion = stats.todos ? Math.round((stats.done / stats.todos) * 100) : 0;
   const pressure = dueDelta === null
@@ -3290,105 +4241,135 @@ function PageCommandCenter({
         : `${dueDelta}d left`;
 
   return (
-    <section className="page-command-center" aria-label="Page command center">
-      <div className="command-center-head">
+    <section className={`page-command-center ${open ? '' : 'is-collapsed'}`} aria-label="Page command center">
+      <button
+        type="button"
+        className="command-center-head command-center-toggle"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
         <span className="command-center-kicker">
           <Command size={14} />
-          Command center
+          Page tools
         </span>
         <div className="command-center-status">
           <span>{insights.intent}</span>
           <strong>{insights.score}/100</strong>
+          {open ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
         </div>
-      </div>
+      </button>
 
-      <div className="command-center-grid">
-        <span>
-          <small>Readiness</small>
-          <strong>{insights.score}%</strong>
-          <em>Nova score</em>
-        </span>
-        <span>
-          <small>Tasks</small>
-          <strong>{stats.done}/{stats.todos}</strong>
-          <em>{completion}% done</em>
-        </span>
-        <span>
-          <small>Pressure</small>
-          <strong>{pressure}</strong>
-          <em>{insights.dueText}</em>
-        </span>
-        <span>
-          <small>Workspace</small>
-          <strong>{workspaceStats.openTasks}</strong>
-          <em>open tasks</em>
-        </span>
-      </div>
+      {open && (
+        <>
+          <div className="command-center-grid">
+            <span>
+              <small>Readiness</small>
+              <strong>{insights.score}%</strong>
+              <em>Nova score</em>
+            </span>
+            <span>
+              <small>Tasks</small>
+              <strong>{stats.done}/{stats.todos}</strong>
+              <em>{completion}% done</em>
+            </span>
+            <span>
+              <small>Pressure</small>
+              <strong>{pressure}</strong>
+              <em>{insights.dueText}</em>
+            </span>
+            <span>
+              <small>Workspace</small>
+              <strong>{workspaceStats.openTasks}</strong>
+              <em>open tasks</em>
+            </span>
+          </div>
 
-      <div className="command-center-focus">
-        <div>
-          <small>Next best move</small>
-          <strong>{insights.bestMove}</strong>
-        </div>
-        <div className="sprint-timer" aria-label={`Focus sprint ${formatTimer(focusSprint.seconds)}`}>
-          <Clock3 size={15} />
-          <strong>{formatTimer(focusSprint.seconds)}</strong>
-        </div>
-      </div>
+          <div className="command-health-list" aria-label="Page health">
+            {healthItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <span key={item.label} className={`health-chip ${item.tone}`}>
+                  <Icon size={14} />
+                  <strong>{item.label}</strong>
+                  <small>{item.detail}</small>
+                </span>
+              );
+            })}
+          </div>
 
-      <div className="command-center-actions">
-        <button type="button" className="primary-action" onClick={() => onAssistantAction('mission')}>
-          <Maximize2 size={15} />
-          Mission
-        </button>
-        <button type="button" onClick={onToggleSprint}>
-          <Clock3 size={15} />
-          {focusSprint.running ? 'Pause' : 'Sprint'}
-        </button>
-        <button type="button" onClick={onResetSprint}>
-          <Circle size={15} />
-          Reset
-        </button>
-        <button type="button" onClick={onAddSmartTask}>
-          <Plus size={15} />
-          Smart task
-        </button>
-        <button type="button" onClick={() => onAssistantAction('cleanup')}>
-          <CheckSquare size={15} />
-          Cleanup
-        </button>
-        <button type="button" onClick={() => onAssistantAction('writerpack')}>
-          <Quote size={15} />
-          Writer
-        </button>
-      </div>
+          <div className="command-center-focus">
+            <div>
+              <small>Next best move</small>
+              <strong>{insights.bestMove}</strong>
+            </div>
+            <div className="sprint-timer" aria-label={`Focus sprint ${formatTimer(focusSprint.seconds)}`}>
+              <Clock3 size={15} />
+              <strong>{formatTimer(focusSprint.seconds)}</strong>
+            </div>
+          </div>
 
-      <div className="command-center-quick-set">
-        <span>Status</span>
-        {['Draft', 'Active', 'Review', 'Done'].map((status) => (
-          <button
-            key={status}
-            type="button"
-            className={(page.status || 'Draft') === status ? 'active' : ''}
-            onClick={() => onUpdatePage({ status })}
-          >
-            {status}
-          </button>
-        ))}
-      </div>
+          <div className="command-center-actions">
+            <button type="button" className="primary-action" onClick={() => onAssistantAction('mission')}>
+              <Maximize2 size={15} />
+              Mission
+            </button>
+            <button type="button" onClick={onToggleSprint}>
+              <Clock3 size={15} />
+              {focusSprint.running ? 'Pause' : 'Sprint'}
+            </button>
+            <button type="button" onClick={onResetSprint}>
+              <Circle size={15} />
+              Reset
+            </button>
+            <button type="button" onClick={onAddSmartTask}>
+              <Plus size={15} />
+              Smart task
+            </button>
+            <button type="button" onClick={() => onAssistantAction('cleanup')}>
+              <CheckSquare size={15} />
+              Cleanup
+            </button>
+            <button type="button" onClick={() => onAssistantAction('writerpack')}>
+              <Quote size={15} />
+              Writer
+            </button>
+          </div>
 
-      <div className="command-center-quick-set">
-        <span>Due</span>
-        <button type="button" className={page.dueDate === todayDateValue() ? 'active' : ''} onClick={() => onUpdatePage({ dueDate: todayDateValue() })}>
-          Today
-        </button>
-        <button type="button" className={page.dueDate === addDaysToDateValue(1) ? 'active' : ''} onClick={() => onUpdatePage({ dueDate: addDaysToDateValue(1) })}>
-          Tomorrow
-        </button>
-        <button type="button" onClick={() => onUpdatePage({ dueDate: '' })}>
-          Clear
-        </button>
-      </div>
+          <TemplateShelf
+            title="Templates"
+            templates={templateLibrary.slice(0, 6)}
+            variant="command"
+            onPick={onAddPage}
+          />
+
+          <div className="command-center-quick-set">
+            <span>Status</span>
+            {['Draft', 'Active', 'Review', 'Done'].map((status) => (
+              <button
+                key={status}
+                type="button"
+                className={(page.status || 'Draft') === status ? 'active' : ''}
+                onClick={() => onUpdatePage({ status })}
+              >
+                {status}
+              </button>
+            ))}
+          </div>
+
+          <div className="command-center-quick-set">
+            <span>Due</span>
+            <button type="button" className={page.dueDate === todayDateValue() ? 'active' : ''} onClick={() => onUpdatePage({ dueDate: todayDateValue() })}>
+              Today
+            </button>
+            <button type="button" className={page.dueDate === addDaysToDateValue(1) ? 'active' : ''} onClick={() => onUpdatePage({ dueDate: addDaysToDateValue(1) })}>
+              Tomorrow
+            </button>
+            <button type="button" onClick={() => onUpdatePage({ dueDate: '' })}>
+              Clear
+            </button>
+          </div>
+        </>
+      )}
     </section>
   );
 }
@@ -3396,12 +4377,13 @@ function PageCommandCenter({
 function PageHeader({ page, onUpdatePage }) {
   const stats = getPageStats(page);
   const tags = page.tags ?? [];
+  const annotationCount = page.blocks.reduce((count, block) => count + (block.annotations?.length ?? 0), 0);
 
   return (
     <header className="page-header">
       <div className="page-icon-row">
         <input
-          className="page-icon-input"
+          className={`page-icon-input ${String(page.icon || '').length > 2 ? 'is-text-icon' : ''}`}
           value={page.icon}
           maxLength={4}
           onChange={(event) => onUpdatePage({ icon: event.target.value || '📄' })}
@@ -3451,6 +4433,12 @@ function PageHeader({ page, onUpdatePage }) {
           <FileText size={14} />
           {page.blocks.length} blocks
         </span>
+        {annotationCount > 0 && (
+          <span>
+            <MessageSquareText size={14} />
+            {annotationCount} annotation{annotationCount === 1 ? '' : 's'}
+          </span>
+        )}
         <span>
           <Clock3 size={14} />
           {stats.readTime} min read
@@ -3482,11 +4470,16 @@ function Block({
   onDuplicate,
   onMoveUp,
   onMoveDown,
+  onAskAI,
   onApplyCommand,
 }) {
   const inputRef = useRef(null);
   const bodyRef = useRef(null);
   const showSlashMenu = slashState?.blockId === block.id;
+  const annotations = block.annotations ?? [];
+  const [annotationOpen, setAnnotationOpen] = useState(false);
+  const [annotationDraft, setAnnotationDraft] = useState('');
+  const [annotationQuote, setAnnotationQuote] = useState('');
 
   useEffect(() => {
     if (inputRef.current && document.activeElement !== inputRef.current) {
@@ -3537,32 +4530,110 @@ function Block({
     }
   }
 
-  if (block.type === 'divider') {
+  function captureSelection(event) {
+    const start = event.currentTarget.selectionStart;
+    const end = event.currentTarget.selectionEnd;
+    if (typeof start !== 'number' || typeof end !== 'number' || start === end) return;
+    setAnnotationQuote(compactText(event.currentTarget.value.slice(start, end), 180));
+  }
+
+  function addAnnotation(event) {
+    event.preventDefault();
+    const text = annotationDraft.trim();
+    if (!text) return;
+
+    onUpdate((currentBlock) => ({
+      annotations: [
+        ...(currentBlock.annotations ?? []),
+        {
+          id: createId('annotation'),
+          text,
+          quote: annotationQuote,
+          createdAt: nowStamp(),
+          resolved: false,
+        },
+      ],
+    }));
+    setAnnotationDraft('');
+    setAnnotationQuote('');
+    setAnnotationOpen(true);
+  }
+
+  function toggleAnnotation(annotationId) {
+    onUpdate((currentBlock) => ({
+      annotations: (currentBlock.annotations ?? []).map((annotation) => (
+        annotation.id === annotationId
+          ? { ...annotation, resolved: !annotation.resolved }
+          : annotation
+      )),
+    }));
+  }
+
+  function removeAnnotation(annotationId) {
+    onUpdate((currentBlock) => ({
+      annotations: (currentBlock.annotations ?? []).filter((annotation) => annotation.id !== annotationId),
+    }));
+  }
+
+  function renderAnnotatedBlock(content) {
     return (
+      <div className={`annotated-block ${annotations.length ? 'has-annotations' : ''}`}>
+        {content}
+        {annotationOpen && (
+          <AnnotationThread
+            annotations={annotations}
+            draft={annotationDraft}
+            quote={annotationQuote}
+            onDraftChange={setAnnotationDraft}
+            onQuoteClear={() => setAnnotationQuote('')}
+            onSubmit={addAnnotation}
+            onToggleResolved={toggleAnnotation}
+            onRemove={removeAnnotation}
+            onClose={() => setAnnotationOpen(false)}
+          />
+        )}
+      </div>
+    );
+  }
+
+  if (block.type === 'divider') {
+    return renderAnnotatedBlock(
       <div className={`block-row divider-row ${isActive ? 'active' : ''}`}>
         <button type="button" className="block-grip" title="Divider block" onClick={onFocus}>
           <Rows3 size={16} />
         </button>
         <hr />
-        <BlockActions onDuplicate={onDuplicate} onMoveUp={onMoveUp} onMoveDown={onMoveDown} onDelete={onDelete} />
+        <BlockActions annotationCount={annotations.length} onAnnotate={() => setAnnotationOpen((open) => !open)} onAskAI={onAskAI} onDuplicate={onDuplicate} onMoveUp={onMoveUp} onMoveDown={onMoveDown} onDelete={onDelete} />
       </div>
     );
   }
 
   if (block.type === 'table') {
-    return (
+    return renderAnnotatedBlock(
       <div className={`block-row table-row ${isActive ? 'active' : ''}`} onFocus={onFocus}>
         <button type="button" className="block-grip" title="Table block">
           <Table2 size={16} />
         </button>
         <EditableTable block={block} onUpdate={onUpdate} />
-        <BlockActions onDuplicate={onDuplicate} onMoveUp={onMoveUp} onMoveDown={onMoveDown} onDelete={onDelete} />
+        <BlockActions annotationCount={annotations.length} onAnnotate={() => setAnnotationOpen((open) => !open)} onAskAI={onAskAI} onDuplicate={onDuplicate} onMoveUp={onMoveUp} onMoveDown={onMoveDown} onDelete={onDelete} />
+      </div>
+    );
+  }
+
+  if (block.type === 'canvas') {
+    return renderAnnotatedBlock(
+      <div className={`block-row canvas-row ${isActive ? 'active' : ''}`} onFocus={onFocus}>
+        <button type="button" className="block-grip" title="Canvas block">
+          <LayoutGrid size={16} />
+        </button>
+        <EditableCanvas block={block} onUpdate={onUpdate} />
+        <BlockActions annotationCount={annotations.length} onAnnotate={() => setAnnotationOpen((open) => !open)} onAskAI={onAskAI} onDuplicate={onDuplicate} onMoveUp={onMoveUp} onMoveDown={onMoveDown} onDelete={onDelete} />
       </div>
     );
   }
 
   if (block.type === 'date') {
-    return (
+    return renderAnnotatedBlock(
       <div className={`block-row text-row ${isActive ? 'active' : ''} block-date`}>
         <button type="button" className="block-grip" title="Date block">
           <CalendarDays size={16} />
@@ -3587,6 +4658,7 @@ function Block({
               placeholder={placeholderFor(block.type)}
               onChange={handleChange}
               onFocus={onFocus}
+              onSelect={captureSelection}
               onKeyDown={handleKeyDown}
               spellCheck="true"
             />
@@ -3599,13 +4671,13 @@ function Block({
           </div>
         </div>
 
-        <BlockActions onDuplicate={onDuplicate} onMoveUp={onMoveUp} onMoveDown={onMoveDown} onDelete={onDelete} />
+        <BlockActions annotationCount={annotations.length} onAnnotate={() => setAnnotationOpen((open) => !open)} onAskAI={onAskAI} onDuplicate={onDuplicate} onMoveUp={onMoveUp} onMoveDown={onMoveDown} onDelete={onDelete} />
       </div>
     );
   }
 
   if (block.type === 'toggle') {
-    return (
+    return renderAnnotatedBlock(
       <div className={`block-row toggle-row ${isActive ? 'active' : ''}`}>
         <button
           type="button"
@@ -3628,6 +4700,7 @@ function Block({
               placeholder="Toggle heading"
               onChange={handleChange}
               onFocus={onFocus}
+              onSelect={captureSelection}
               onKeyDown={handleKeyDown}
               spellCheck="true"
             />
@@ -3651,19 +4724,20 @@ function Block({
                 onUpdate({ body: event.target.value });
               }}
               onFocus={onFocus}
+              onSelect={captureSelection}
               spellCheck="true"
             />
           )}
         </div>
 
-        <BlockActions onDuplicate={onDuplicate} onMoveUp={onMoveUp} onMoveDown={onMoveDown} onDelete={onDelete} />
+        <BlockActions annotationCount={annotations.length} onAnnotate={() => setAnnotationOpen((open) => !open)} onAskAI={onAskAI} onDuplicate={onDuplicate} onMoveUp={onMoveUp} onMoveDown={onMoveDown} onDelete={onDelete} />
       </div>
     );
   }
 
   const Icon = getBlockIcon(block.type);
 
-  return (
+  return renderAnnotatedBlock(
     <div className={`block-row text-row ${isActive ? 'active' : ''} block-${block.type}`}>
       <button type="button" className="block-grip" title={`${getBlockLabel(block.type)} block`}>
         <Icon size={16} />
@@ -3690,6 +4764,7 @@ function Block({
           placeholder={placeholderFor(block.type)}
           onChange={handleChange}
           onFocus={onFocus}
+          onSelect={captureSelection}
           onKeyDown={handleKeyDown}
           spellCheck="true"
         />
@@ -3701,14 +4776,124 @@ function Block({
         )}
       </div>
 
-      <BlockActions onDuplicate={onDuplicate} onMoveUp={onMoveUp} onMoveDown={onMoveDown} onDelete={onDelete} />
+      <BlockActions annotationCount={annotations.length} onAnnotate={() => setAnnotationOpen((open) => !open)} onAskAI={onAskAI} onDuplicate={onDuplicate} onMoveUp={onMoveUp} onMoveDown={onMoveDown} onDelete={onDelete} />
     </div>
   );
 }
 
-function BlockActions({ onDuplicate, onMoveUp, onMoveDown, onDelete }) {
+function AnnotationThread({
+  annotations,
+  draft,
+  quote,
+  onDraftChange,
+  onQuoteClear,
+  onSubmit,
+  onToggleResolved,
+  onRemove,
+  onClose,
+}) {
+  const openCount = annotations.filter((annotation) => !annotation.resolved).length;
+
+  return (
+    <section className="annotation-thread" aria-label="Block annotations">
+      <header className="annotation-thread-header">
+        <span>
+          <MessageSquareText size={15} />
+          <strong>Annotations</strong>
+          <small>{openCount} open</small>
+        </span>
+        <button type="button" title="Close annotations" aria-label="Close annotations" onClick={onClose}>
+          <X size={14} />
+        </button>
+      </header>
+
+      {annotations.length > 0 && (
+        <div className="annotation-list">
+          {annotations.map((annotation) => (
+            <article key={annotation.id} className={`annotation-item ${annotation.resolved ? 'is-resolved' : ''}`}>
+              <div className="annotation-avatar" aria-hidden="true">C</div>
+              <div className="annotation-content">
+                <div className="annotation-meta">
+                  <strong>You</strong>
+                  <small>{formatDate(annotation.createdAt)}</small>
+                </div>
+                {annotation.quote && <blockquote>{annotation.quote}</blockquote>}
+                <p>{annotation.text}</p>
+                <div className="annotation-item-actions">
+                  <button type="button" onClick={() => onToggleResolved(annotation.id)}>
+                    <CheckSquare size={12} />
+                    {annotation.resolved ? 'Reopen' : 'Resolve'}
+                  </button>
+                  <button
+                    type="button"
+                    className="danger"
+                    title="Delete annotation"
+                    aria-label="Delete annotation"
+                    onClick={() => onRemove(annotation.id)}
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+
+      <form className="annotation-composer" onSubmit={onSubmit}>
+        {quote && (
+          <div className="annotation-quote-preview">
+            <span>{quote}</span>
+            <button type="button" title="Remove selected text" aria-label="Remove selected text" onClick={onQuoteClear}>
+              <X size={12} />
+            </button>
+          </div>
+        )}
+        <textarea
+          value={draft}
+          rows={2}
+          placeholder={quote ? 'Add a note about the selected text...' : 'Add an annotation...'}
+          onChange={(event) => onDraftChange(event.target.value)}
+          onKeyDown={(event) => {
+            if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+              event.preventDefault();
+              event.currentTarget.form?.requestSubmit();
+            }
+          }}
+          autoFocus
+        />
+        <div className="annotation-composer-footer">
+          <small>{quote ? 'Selected text attached' : 'Select text first to attach a quote'}</small>
+          <button type="submit" disabled={!draft.trim()}>
+            <MessageSquareText size={13} />
+            Annotate
+          </button>
+        </div>
+      </form>
+    </section>
+  );
+}
+
+function BlockActions({ annotationCount = 0, onAnnotate, onAskAI, onDuplicate, onMoveUp, onMoveDown, onDelete }) {
   return (
     <span className="block-actions" aria-label="Block actions">
+      {onAnnotate && (
+        <button
+          type="button"
+          className={`block-action annotation-action ${annotationCount ? 'has-count' : ''}`}
+          title="Annotate this block"
+          aria-label={`Annotate this block${annotationCount ? `, ${annotationCount} existing` : ''}`}
+          onClick={onAnnotate}
+        >
+          <MessageSquareText size={14} />
+          {annotationCount > 0 && <small>{annotationCount > 9 ? '9+' : annotationCount}</small>}
+        </button>
+      )}
+      {onAskAI && (
+        <button type="button" className="block-action ai-action" title="Ask AI about this block" aria-label="Ask AI about this block" onClick={onAskAI}>
+          <Star size={14} />
+        </button>
+      )}
       <button type="button" className="block-action" title="Move block up" aria-label="Move block up" onClick={onMoveUp}>
         <ChevronUp size={14} />
       </button>
@@ -3725,37 +4910,124 @@ function BlockActions({ onDuplicate, onMoveUp, onMoveDown, onDelete }) {
   );
 }
 
-function EditableTable({ block, onUpdate }) {
-  function updateCell(rowIndex, columnIndex, value) {
-    const rows = block.rows.map((row, index) =>
-      index === rowIndex ? row.map((cell, cellIndex) => (cellIndex === columnIndex ? value : cell)) : row,
-    );
-    onUpdate({ rows });
+function EditableCanvas({ block, onUpdate }) {
+  const cards = block.cards?.length ? block.cards : createCanvasBlock().cards;
+
+  function updateCard(cardId, patch) {
+    onUpdate({
+      cards: cards.map((card) => (card.id === cardId ? { ...card, ...patch } : card)),
+    });
   }
 
-  function addRow() {
-    onUpdate({ rows: [...block.rows, block.columns.map(() => '')] });
+  function addCard() {
+    const tones = ['violet', 'teal', 'amber', 'rose'];
+    onUpdate({
+      cards: [
+        ...cards,
+        {
+          id: createId('card'),
+          title: 'New card',
+          body: 'Connect this idea to the rest of the canvas.',
+          tone: tones[cards.length % tones.length],
+        },
+      ],
+    });
   }
 
   return (
-    <div className="table-block">
+    <section className="canvas-block" aria-label="Canvas moodboard block">
+      <div className="canvas-head">
+        <span>
+          <strong>Canvas</strong>
+          <small>Freeform moodboard for spatial thinking</small>
+        </span>
+        <button type="button" onClick={addCard}>
+          <Plus size={14} />
+          Card
+        </button>
+      </div>
+      <div className="canvas-surface">
+        {cards.map((card, index) => (
+          <article key={card.id} className={`canvas-card tone-${card.tone || 'violet'} position-${index % 6}`}>
+            <input
+              value={card.title}
+              onChange={(event) => updateCard(card.id, { title: event.target.value })}
+              aria-label={`Canvas card ${index + 1} title`}
+            />
+            <textarea
+              value={card.body}
+              rows={3}
+              onChange={(event) => updateCard(card.id, { body: event.target.value })}
+              aria-label={`Canvas card ${index + 1} body`}
+            />
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function EditableTable({ block, onUpdate }) {
+  const [view, setView] = useState('table');
+  const columns = block.columns?.length ? block.columns : ['Task', 'Status', 'Owner'];
+  const rows = block.rows ?? [];
+  const viewOptions = [
+    { id: 'table', label: 'Table', icon: Table2 },
+    { id: 'board', label: 'Board', icon: LayoutGrid },
+    { id: 'timeline', label: 'Timeline', icon: Clock3 },
+    { id: 'chart', label: 'Chart', icon: Rows3 },
+  ];
+  const detectedGroupColumnIndex = columns.findIndex((column) => /status|confidence|priority|phase|owner/i.test(column));
+  const fallbackGroupIndex = detectedGroupColumnIndex >= 0 ? detectedGroupColumnIndex : Math.min(1, columns.length - 1);
+
+  function updateCell(rowIndex, columnIndex, value) {
+    const nextRows = rows.map((row, index) =>
+      index === rowIndex
+        ? columns.map((_, cellIndex) => (cellIndex === columnIndex ? value : getCell(row, cellIndex)))
+        : row,
+    );
+    onUpdate({ rows: nextRows });
+  }
+
+  function addRow() {
+    onUpdate({ rows: [...rows, columns.map(() => '')] });
+  }
+
+  function getCell(row, index) {
+    return row?.[index] || '';
+  }
+
+  function getRowTitle(row, index) {
+    return getCell(row, 0) || `Record ${index + 1}`;
+  }
+
+  function scoreRow(row, index) {
+    const text = row.join(' ').toLowerCase();
+    if (text.includes('high') || text.includes('urgent') || text.includes('done')) return 92;
+    if (text.includes('medium') || text.includes('review') || text.includes('progress')) return 68;
+    if (text.includes('low') || text.includes('draft') || text.includes('planned')) return 42;
+    return Math.min(92, 34 + index * 14);
+  }
+
+  function renderTableView() {
+    return (
       <table>
         <thead>
           <tr>
-            {block.columns.map((column) => (
-              <th key={column}>{column}</th>
+            {columns.map((column, index) => (
+              <th key={`${column}-${index}`}>{column}</th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {block.rows.map((row, rowIndex) => (
+          {rows.map((row, rowIndex) => (
             <tr key={`${block.id}-${rowIndex}`}>
-              {row.map((cell, columnIndex) => (
+              {columns.map((column, columnIndex) => (
                 <td key={`${block.id}-${rowIndex}-${columnIndex}`}>
                   <input
-                    value={cell}
+                    value={getCell(row, columnIndex)}
                     onChange={(event) => updateCell(rowIndex, columnIndex, event.target.value)}
-                    aria-label={`${block.columns[columnIndex]} row ${rowIndex + 1}`}
+                    aria-label={`${column} row ${rowIndex + 1}`}
                   />
                 </td>
               ))}
@@ -3763,6 +5035,101 @@ function EditableTable({ block, onUpdate }) {
           ))}
         </tbody>
       </table>
+    );
+  }
+
+  function renderBoardView() {
+    const groups = rows.reduce((acc, row, index) => {
+      const label = getCell(row, fallbackGroupIndex) || 'Unsorted';
+      acc[label] = acc[label] ? [...acc[label], { row, index }] : [{ row, index }];
+      return acc;
+    }, {});
+
+    return (
+      <div className="data-board-view">
+        {Object.entries(groups).map(([label, items]) => (
+          <section key={label} className="data-board-column">
+            <header>
+              <span>{label}</span>
+              <small>{items.length}</small>
+            </header>
+            {items.map(({ row, index }) => (
+              <article key={`${block.id}-board-${index}`} className="data-card">
+                <strong>{getRowTitle(row, index)}</strong>
+                <small>{columns.slice(1, 3).map((column, columnIndex) => getCell(row, columnIndex + 1) || column).join(' / ')}</small>
+              </article>
+            ))}
+          </section>
+        ))}
+      </div>
+    );
+  }
+
+  function renderTimelineView() {
+    return (
+      <div className="data-timeline-view">
+        {rows.map((row, index) => (
+          <div className="timeline-item" key={`${block.id}-timeline-${index}`}>
+            <span className="timeline-dot" />
+            <div>
+              <strong>{getRowTitle(row, index)}</strong>
+              <small>{getCell(row, fallbackGroupIndex) || columns[fallbackGroupIndex]}</small>
+            </div>
+            <span className="timeline-track">
+              <span style={{ width: `${scoreRow(row, index)}%` }} />
+            </span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  function renderChartView() {
+    return (
+      <div className="data-chart-view">
+        {rows.map((row, index) => (
+          <div className="chart-row" key={`${block.id}-chart-${index}`}>
+            <span>{getRowTitle(row, index)}</span>
+            <div aria-hidden="true">
+              <span style={{ width: `${scoreRow(row, index)}%` }} />
+            </div>
+            <strong>{scoreRow(row, index)}%</strong>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="table-block linked-data-block">
+      <div className="data-view-header">
+        <span>
+          <strong>Linked data</strong>
+          <small>{rows.length} records synced across views</small>
+        </span>
+        <div className="data-view-tabs" role="tablist" aria-label="Database view">
+          {viewOptions.map((item) => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                className={view === item.id ? 'active' : ''}
+                onClick={() => setView(item.id)}
+                role="tab"
+                aria-selected={view === item.id}
+              >
+                <Icon size={13} />
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      {view === 'table' && renderTableView()}
+      {view === 'board' && renderBoardView()}
+      {view === 'timeline' && renderTimelineView()}
+      {view === 'chart' && renderChartView()}
       <button type="button" className="table-add-row" onClick={addRow}>
         <Plus size={15} />
         Row
@@ -3838,6 +5205,8 @@ function placeholderFor(type) {
 function AssistantPanel({ page, pages, onRunAction, onUpdatePage, onSelectPage }) {
   const insights = getAssistantInsights(page, pages);
   const tags = page.tags ?? [];
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [assistantFloats, setAssistantFloats] = useState(false);
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState('');
   const [assistantMode, setAssistantMode] = useState('coach');
@@ -3851,7 +5220,18 @@ function AssistantPanel({ page, pages, onRunAction, onUpdatePage, onSelectPage }
   useEffect(() => {
     setQuestion('');
     setAnswer('');
+    setAssistantOpen(false);
   }, [page.id]);
+
+  useEffect(() => {
+    function updateAssistantPosition() {
+      setAssistantFloats((window.scrollY || document.documentElement.scrollTop || 0) > 180);
+    }
+
+    updateAssistantPosition();
+    window.addEventListener('scroll', updateAssistantPosition, { passive: true });
+    return () => window.removeEventListener('scroll', updateAssistantPosition);
+  }, []);
 
   function addTag(tag) {
     onUpdatePage({ tags: [...new Set([...tags, tag])].slice(0, 8) });
@@ -3871,12 +5251,36 @@ function AssistantPanel({ page, pages, onRunAction, onUpdatePage, onSelectPage }
     runQuestion(prompt);
   }
 
+  if (!assistantOpen) {
+    return (
+      <button
+        type="button"
+        className={`floating-assistant-button ${assistantFloats ? 'is-floating' : 'is-docked'}`}
+        aria-label="Open Nova AI"
+        title={`Open Nova AI - ${insights.score} / ${scoreLabel}`}
+        onClick={() => setAssistantOpen(true)}
+      >
+        <span className="floating-assistant-mark">
+          <Star size={17} />
+        </span>
+      </button>
+    );
+  }
+
   return (
-    <section className="inspector-panel compact-panel assistant-panel">
-      <div className="panel-heading">
+    <section className="inspector-panel compact-panel assistant-panel floating-assistant-card">
+      <button
+        type="button"
+        className="panel-heading panel-toggle assistant-floating-head"
+        aria-expanded={assistantOpen}
+        onClick={() => setAssistantOpen(false)}
+      >
         <span>Nova AI</span>
-        <Star size={15} />
-      </div>
+        <span className="panel-heading-actions">
+          <Star size={15} />
+          <ChevronDown size={15} />
+        </span>
+      </button>
       <div className="assistant-overview">
         <div className="assistant-score-card" aria-label={`Assistant score ${insights.score}`}>
           <strong>{insights.score}</strong>
@@ -4135,31 +5539,268 @@ function AssistantPanel({ page, pages, onRunAction, onUpdatePage, onSelectPage }
   );
 }
 
-function Inspector({ page, pages, onUpdatePage, onInsertBlock, onFocusBlock, onAssistantAction, onSelectPage }) {
+function CollapsiblePanel({ title, icon: Icon, defaultOpen = false, className = '', children }) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  return (
+    <section className={`inspector-panel compact-panel collapsible-panel ${open ? '' : 'is-collapsed'} ${className}`}>
+      <button
+        type="button"
+        className="panel-heading panel-toggle"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <span>{title}</span>
+        <span className="panel-heading-actions">
+          <Icon size={15} />
+          {open ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+        </span>
+      </button>
+      {open && <div className="collapsible-panel-body">{children}</div>}
+    </section>
+  );
+}
+
+function WorkTreePanel({ page, pages, onSelectPage, onFocusBlock, onToggleRelation }) {
+  const [openBranches, setOpenBranches] = useState({
+    tasks: true,
+    relations: true,
+    structure: false,
+    nearby: false,
+  });
+  const tree = useMemo(() => getWorkTreeData(page, pages), [page, pages]);
+  const totalTasks = tree.tasks.length;
+  const openTasks = totalTasks - tree.doneTasks;
+  const progress = totalTasks ? Math.round((tree.doneTasks / totalTasks) * 100) : 100;
+
+  function toggleBranch(branch) {
+    setOpenBranches((current) => ({ ...current, [branch]: !current[branch] }));
+  }
+
+  function renderBranch({ id, title, count, icon: Icon, children }) {
+    const open = openBranches[id];
+    return (
+      <div className={`work-tree-branch ${open ? 'is-open' : ''}`}>
+        <button
+          type="button"
+          className="work-tree-branch-toggle"
+          aria-expanded={open}
+          onClick={() => toggleBranch(id)}
+        >
+          <span>
+            {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+            <Icon size={14} />
+            {title}
+          </span>
+          <small>{count}</small>
+        </button>
+        {open && <div className="work-tree-children">{children}</div>}
+      </div>
+    );
+  }
+
+  return (
+    <CollapsiblePanel title="Work tree" icon={Rows3} defaultOpen className="work-tree-panel">
+      <div className="work-tree-root">
+        <button type="button" className="work-tree-page-root" onClick={() => onSelectPage(page.id)}>
+          <span className="work-tree-page-icon" aria-hidden="true">{page.icon || 'NW'}</span>
+          <span>
+            <strong>{page.title || 'Untitled'}</strong>
+            <small>{page.section || 'Private'} / {page.status || 'Draft'}</small>
+          </span>
+        </button>
+        <div className="work-tree-progress" aria-label={`${progress}% task progress`}>
+          <span style={{ width: `${progress}%` }} />
+        </div>
+        <div className="work-tree-meta">
+          <span>{openTasks} open</span>
+          <span>{tree.relationPages.length} linked</span>
+          <span>{tree.outlineItems.length + tree.dataBlocks.length} anchors</span>
+        </div>
+      </div>
+
+      {renderBranch({
+        id: 'tasks',
+        title: 'Tasks',
+        count: totalTasks,
+        icon: CheckSquare,
+        children: tree.tasks.length ? (
+          tree.tasks.slice(0, 7).map((task) => (
+            <button
+              key={task.id}
+              type="button"
+              className={`work-tree-node task-node ${task.checked ? 'is-done' : ''}`}
+              onClick={() => onFocusBlock(task.id)}
+              title={task.text}
+            >
+              {task.checked ? <CheckSquare size={13} /> : <Circle size={13} />}
+              <span>{task.text}</span>
+            </button>
+          ))
+        ) : (
+          <p className="work-tree-empty">No tasks yet.</p>
+        ),
+      })}
+
+      {renderBranch({
+        id: 'relations',
+        title: 'Linked pages',
+        count: tree.relationPages.length,
+        icon: Link2,
+        children: (
+          <>
+            {tree.relationPages.length ? tree.relationPages.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className="work-tree-node page-node"
+                onClick={() => onSelectPage(item.id)}
+                title={item.title || 'Untitled'}
+              >
+                <span className="work-tree-mini-icon" aria-hidden="true">{item.icon || 'PG'}</span>
+                <span>{item.title || 'Untitled'}</span>
+              </button>
+            )) : <p className="work-tree-empty">No two-way links yet.</p>}
+            {tree.relatedSuggestions.length > 0 && (
+              <div className="work-tree-suggestions">
+                <small>Suggested links</small>
+                {tree.relatedSuggestions.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => onToggleRelation(item.id)}
+                    title={`Make relation: ${item.reason}`}
+                  >
+                    <Plus size={12} />
+                    <span>{item.title}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
+        ),
+      })}
+
+      {renderBranch({
+        id: 'structure',
+        title: 'Page structure',
+        count: tree.outlineItems.length + tree.dataBlocks.length,
+        icon: Hash,
+        children: (
+          <>
+            {tree.outlineItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`work-tree-node outline-node level-${item.level}`}
+                  onClick={() => onFocusBlock(item.id)}
+                  title={item.label}
+                >
+                  <Icon size={13} />
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
+            {tree.dataBlocks.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className="work-tree-node data-node"
+                onClick={() => onFocusBlock(item.id)}
+                title={item.label}
+              >
+                {item.type === 'table' ? <Table2 size={13} /> : <LayoutGrid size={13} />}
+                <span>{item.label}</span>
+              </button>
+            ))}
+            {!tree.outlineItems.length && !tree.dataBlocks.length && (
+              <p className="work-tree-empty">Add headings, dates, tables, or canvas blocks.</p>
+            )}
+          </>
+        ),
+      })}
+
+      {renderBranch({
+        id: 'nearby',
+        title: `Same ${page.section || 'section'}`,
+        count: tree.sectionPages.length,
+        icon: FileText,
+        children: tree.sectionPages.length ? tree.sectionPages.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className="work-tree-node page-node"
+            onClick={() => onSelectPage(item.id)}
+            title={item.title || 'Untitled'}
+          >
+            <span className="work-tree-mini-icon" aria-hidden="true">{item.icon || 'PG'}</span>
+            <span>{item.title || 'Untitled'}</span>
+          </button>
+        )) : (
+          <p className="work-tree-empty">No nearby pages in this section.</p>
+        ),
+      })}
+    </CollapsiblePanel>
+  );
+}
+
+function Inspector({ page, pages, onUpdatePage, onSelectPage, onToggleRelation, onInsertBlock, onFocusBlock }) {
   const done = page.blocks.filter((block) => block.type === 'todo' && block.checked).length;
   const todos = page.blocks.filter((block) => block.type === 'todo').length;
   const progress = todos ? Math.round((done / todos) * 100) : 0;
   const stats = getPageStats(page);
   const tagText = (page.tags ?? []).join(', ');
   const outlineItems = getOutlineItems(page);
-  const healthItems = getPageHealth(page);
+  const insights = getAssistantInsights(page, pages);
+  const activityItems = getActivityItems(page, pages);
+  const relationPages = pages.filter((item) => item.id !== page.id && (page.relations ?? []).includes(item.id));
+  const relationOptions = pages.filter((item) => item.id !== page.id && !(page.relations ?? []).includes(item.id));
 
   return (
     <aside className="inspector" aria-label="Page tools">
-      <AssistantPanel page={page} pages={pages} onRunAction={onAssistantAction} onUpdatePage={onUpdatePage} onSelectPage={onSelectPage} />
-
-      <section className="inspector-panel compact-panel">
+      <section className="inspector-panel compact-panel progress-panel">
         <div className="panel-heading">
-          <span>Properties</span>
-          <Hash size={15} />
+          <span>Progress</span>
+          <ListChecks size={15} />
         </div>
+        <div className="progress-meter" aria-label={`${progress}% complete`}>
+          <span style={{ width: `${progress}%` }} />
+        </div>
+        <p>{todos ? `${done} of ${todos} tasks complete` : 'No tasks on this page yet'}</p>
+      </section>
+
+      <WorkTreePanel
+        page={page}
+        pages={pages}
+        onSelectPage={onSelectPage}
+        onFocusBlock={onFocusBlock}
+        onToggleRelation={onToggleRelation}
+      />
+
+      <CollapsiblePanel title="AI suggestions" icon={Star} defaultOpen>
+        <div className="smart-digest">
+          <strong>{insights.signal}</strong>
+          <p>{insights.bestMove}</p>
+        </div>
+        <div className="smart-suggestion-list">
+          {insights.nextActions.slice(0, 3).map((item) => (
+            <span key={item}>
+              <CheckSquare size={13} />
+              {item}
+            </span>
+          ))}
+        </div>
+      </CollapsiblePanel>
+
+      <CollapsiblePanel title="Properties" icon={Hash}>
         <label className="property-field">
           <span>Section</span>
           <select value={page.section} onChange={(event) => onUpdatePage({ section: event.target.value })}>
-            <option>Private</option>
-            <option>Teamspace</option>
-            <option>Archive</option>
-            <option>Shared</option>
+            {sectionOptions.map((section) => (
+              <option key={section}>{section}</option>
+            ))}
           </select>
         </label>
         <label className="property-field">
@@ -4212,43 +5853,34 @@ function Inspector({ page, pages, onUpdatePage, onInsertBlock, onFocusBlock, onA
             }}
           />
         </label>
-      </section>
+      </CollapsiblePanel>
 
-      <section className="inspector-panel compact-panel">
-        <div className="panel-heading">
-          <span>Progress</span>
-          <ListChecks size={15} />
+      <CollapsiblePanel title="Relations" icon={Link2}>
+        <label className="property-field">
+          <span>Link page</span>
+          <select
+            value=""
+            onChange={(event) => {
+              if (event.target.value) onToggleRelation(event.target.value);
+            }}
+          >
+            <option value="">Choose a page...</option>
+            {relationOptions.map((item) => (
+              <option key={item.id} value={item.id}>{item.title || 'Untitled'}</option>
+            ))}
+          </select>
+        </label>
+        <div className="relation-list">
+          {relationPages.length ? relationPages.map((item) => (
+            <button key={item.id} type="button" onClick={() => onToggleRelation(item.id)} title="Remove relation">
+              <strong>{item.icon} {item.title || 'Untitled'}</strong>
+              <small>{item.section || 'Private'} / two-way relation</small>
+            </button>
+          )) : <p>No linked pages yet.</p>}
         </div>
-        <div className="progress-meter" aria-label={`${progress}% complete`}>
-          <span style={{ width: `${progress}%` }} />
-        </div>
-        <p>{todos ? `${done} of ${todos} tasks complete` : 'No tasks on this page yet'}</p>
-      </section>
+      </CollapsiblePanel>
 
-      <section className="inspector-panel compact-panel health-panel">
-        <div className="panel-heading">
-          <span>Page health</span>
-          <Clock3 size={15} />
-        </div>
-        <div className="health-list">
-          {healthItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <span key={item.label} className={`health-chip ${item.tone}`}>
-                <Icon size={14} />
-                <strong>{item.label}</strong>
-                <small>{item.detail}</small>
-              </span>
-            );
-          })}
-        </div>
-      </section>
-
-      <section className="inspector-panel compact-panel outline-panel">
-        <div className="panel-heading">
-          <span>Outline</span>
-          <Hash size={15} />
-        </div>
+      <CollapsiblePanel title="Outline" icon={Hash} className="outline-panel">
         {outlineItems.length > 0 ? (
           <div className="outline-list">
             {outlineItems.map((item) => {
@@ -4270,13 +5902,9 @@ function Inspector({ page, pages, onUpdatePage, onInsertBlock, onFocusBlock, onA
         ) : (
           <p>Add headings or Date blocks to build an outline.</p>
         )}
-      </section>
+      </CollapsiblePanel>
 
-      <section className="inspector-panel compact-panel">
-        <div className="panel-heading">
-          <span>Insights</span>
-          <FileText size={15} />
-        </div>
+      <CollapsiblePanel title="Insights" icon={FileText}>
         <div className="stats-grid">
           <span>
             <strong>{stats.words}</strong>
@@ -4295,13 +5923,20 @@ function Inspector({ page, pages, onUpdatePage, onInsertBlock, onFocusBlock, onA
             Dates
           </span>
         </div>
-      </section>
+      </CollapsiblePanel>
 
-      <section className="inspector-panel compact-panel insert-panel">
-        <div className="panel-heading">
-          <span>Add blocks</span>
-          <Plus size={15} />
+      <CollapsiblePanel title="Activity" icon={Clock3}>
+        <div className="activity-feed">
+          {activityItems.map((item) => (
+            <span key={`${item.label}-${item.detail}`}>
+              <strong>{item.label}</strong>
+              <small>{item.detail}</small>
+            </span>
+          ))}
         </div>
+      </CollapsiblePanel>
+
+      <CollapsiblePanel title="Add blocks" icon={Plus} className="insert-panel">
         <div className="insert-grid">
           {allCommands.map((item) => {
             const Icon = item.icon;
@@ -4313,7 +5948,7 @@ function Inspector({ page, pages, onUpdatePage, onInsertBlock, onFocusBlock, onA
             );
           })}
         </div>
-      </section>
+      </CollapsiblePanel>
 
     </aside>
   );
@@ -4328,3 +5963,4 @@ function parseTags(value) {
       .slice(0, 8),
   )];
 }
+
