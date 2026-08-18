@@ -1997,7 +1997,7 @@ function NovaIntro({ onDismiss }) {
         <div className="intro-copy">
           <span>Welcome to</span>
           <h1>Nova Workspace</h1>
-          <p>Made by Cris</p>
+          <p>Made by Bhawesh</p>
         </div>
         <div className="intro-loader" aria-hidden="true">
           <span />
